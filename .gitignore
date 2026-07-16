@@ -1,9 +1,13 @@
-# dev dependencies
+# secrets — NEVER commit
+.env
+.env.*
+!.env.example
+
+# dependencies (there are none, but just in case)
 node_modules/
 
-# build output — the delivered .html contains the baked-in API key,
-# so it must NEVER be committed
-dist/*.html
+# dead build output from the v0.1 single-file architecture
+dist/
 
 # misc
 .DS_Store

@@ -17,7 +17,14 @@ DS.extract = (function () {
   })();
 
   async function fromPdf(arrayBuffer) {
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const pdf = await pdfjsLib.getDocument({
+      data: arrayBuffer,
+      // SECURITY: mitigates CVE-2024-4367 (GHSA-wgrm-67xf-hhpq) — a malicious
+      // PDF can otherwise execute arbitrary JS in this page, which would expose
+      // the baked-in API key and the document text. We're pinned to pdf.js v3
+      // for the file://-compatible UMD build, so this flag is the fix.
+      isEvalSupported: false,
+    }).promise;
     let text = "";
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);

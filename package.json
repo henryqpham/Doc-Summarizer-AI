@@ -1,16 +1,18 @@
 {
   "name": "doc-summarizer-ai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Single-file, in-browser document summarizer that outputs a fixed email structure.",
+  "type": "module",
+  "description": "Local document summarizer. Drag a doc, get an email-ready summary via Ask Sage.",
   "scripts": {
-    "build": "node build/build.mjs"
+    "start": "node server.mjs",
+    "probe": "node tools/probe.mjs"
   },
-  "devDependencies": {
-    "mammoth": "^1.6.0",
-    "pdfjs-dist": "3.11.174"
+  "engines": {
+    "node": ">=20.12"
   },
   "comments": {
-    "pdfjs-dist": "Pinned to the 3.x UMD build, which exposes a global `pdfjsLib` usable from a classic <script>. pdf.js v4+ is ESM-only and won't work when the file is opened via file://."
+    "dependencies": "Intentionally ZERO. Node 20.12+ provides fetch, FormData, Blob, and process.loadEnvFile() natively. Nothing to audit, no lockfile drift, no transitive CVEs in a CUI tool.",
+    "history": "v0.1 tried to be a single self-contained .html emailed to the user. That died when we confirmed Ask Sage returns no Access-Control-Allow-Origin, so a browser cannot call it directly. The API call now happens in this local Node process."
   }
 }

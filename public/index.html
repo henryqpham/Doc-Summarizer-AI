@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Document Summarizer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app__header">
+        <h1>Document Summarizer</h1>
+        <p class="app__subtitle">Drop a document. Copy the summary into your email.</p>
+      </header>
+
+      <section
+        id="dropzone"
+        class="dropzone"
+        role="button"
+        tabindex="0"
+        aria-label="Drop a document or click to choose a file"
+      >
+        <p class="dropzone__hint">Drop a PDF, DOCX, or TXT file here</p>
+        <p class="dropzone__sub">or click to choose a file</p>
+        <input id="filepicker" class="dropzone__input" type="file" hidden />
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <section class="output">
+        <div class="output__bar">
+          <label for="output" class="output__label">Summary</label>
+          <div class="output__actions">
+            <button id="copy" class="btn btn--primary" type="button">Copy</button>
+            <button id="clear" class="btn" type="button">Clear</button>
+          </div>
+        </div>
+        <!-- autocomplete="off" prevents the browser's session-restore from
+             persisting this field's contents to disk. -->
+        <textarea
+          id="output"
+          class="output__text"
+          rows="16"
+          placeholder="The formatted summary will appear here…"
+          spellcheck="false"
+          autocomplete="off"
+        ></textarea>
+      </section>
+
+      <footer class="app__footer">
+        Nothing is saved on this computer. Documents go only to your approved Ask Sage instance.
+      </footer>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
