@@ -12,22 +12,71 @@ import { readFile } from "node:fs/promises";
 import { join, dirname, extname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { loadEnv, requireVars, requireUrl } from "./lib/env.mjs";
 
-// Load .env if present. If it isn't, fall through — the values may already be
-// set in the real environment. assertConfig() below reports what's missing.
+// Config may come from .env or the real environment. loadEnv distinguishes the
+// failure modes (missing file / BOM / unparseable) instead of silently swallowing.
+// Only two settings are actually required. The model is discovered below.
+const REQUIRED = ["ASKSAGE_BASE_URL", "ASKSAGE_API_KEY"];
 try {
-  process.loadEnvFile();
-} catch {
-  /* no .env — rely on process.env */
+  const source = loadEnv(REQUIRED);
+  requireVars(REQUIRED, source);
+  requireUrl("ASKSAGE_BASE_URL"); // catches unreplaced <placeholders> and non-URLs
+} catch (err) {
+  console.error(`\n  ${err.message}\n`);
+  process.exit(1);
 }
 
-const { config, assertConfig, summarizeFile } = await import("./lib/asksage.mjs");
+// Dynamic import: asksage.mjs reads process.env at module scope, so it must load
+// AFTER loadEnv() above. A static import would hoist and read empty values.
+const { config, assertConfig, summarizeFile, listModels } = await import("./lib/asksage.mjs");
 
 try {
   assertConfig();
 } catch (err) {
   console.error(`\n  ${err.message}\n`);
   process.exit(1);
+}
+
+// No model set? Don't make the user go run a separate tool — just go get the
+// list and show it. This is the only thing that genuinely can't be guessed.
+if (!config.model) {
+  console.log(`\n  ASKSAGE_MODEL isn't set — fetching the models your account can use…\n`);
+  try {
+    const { models, raw } = await listModels();
+    if (models?.length) {
+      for (const m of models) console.log(`      ${m}`);
+      console.log(`\n  Pick one and put it in .env:\n\n      ASKSAGE_MODEL=<one of the above>\n`);
+    } else {
+      console.log(`  Couldn't recognise the list format. Raw response:\n`);
+      console.log(JSON.stringify(raw, null, 2));
+      console.log(`\n  Paste this to Claude and it'll be parsed properly.\n`);
+    }
+  } catch (err) {
+    console.error(`  ${err.message}\n`);
+    // Only suggest the email exchange for an ACTUAL auth failure. A network
+    // error is not an auth problem and pointing there sends you the wrong way.
+    if (/Authentication failed/i.test(err.message) && !config.email) {
+      console.error(`  Your instance appears to need the documented email + api_key exchange.
+  Add your account email to .env:
+
+      ASKSAGE_EMAIL=you@youragency.gov\n`);
+    }
+  }
+  process.exit(1);
+}
+
+// Ask Sage's model list mixes government and commercial endpoints. The suffix is
+// the only thing distinguishing them, and the commercial ones are often the
+// newer/more capable — an easy and expensive mistake to make with CUI.
+if (!/-gov$/.test(config.model)) {
+  console.warn(`
+  ⚠  "${config.model}" does not end in "-gov".
+
+     Ask Sage lists government ("-gov") and commercial ("-com" or no suffix)
+     endpoints side by side. Sending CUI to a commercial endpoint would be a
+     spill. If this is deliberate, carry on — otherwise pick a "-gov" model.
+`);
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -100,17 +149,22 @@ const server = createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   const url = `http://${HOST}:${PORT}`;
   const masked = config.apiKey.slice(0, 6) + "…" + config.apiKey.slice(-4);
+  const auth = config.email ? `${config.email} + key ${masked}` : `API key only (${masked})`;
   console.log(`
   Document Summarizer is running.
 
     Open:      ${url}
     Instance:  ${config.baseUrl}
     Model:     ${config.model}
-    Account:   ${config.email}  (key ${masked})
+    Auth:      ${auth}
 
   Nothing is stored on this machine. Close this window to stop.
 `);
-  // Open the PM's default browser so she never touches a terminal.
+  // Open the default browser so the end user never touches a terminal.
+  // Skipped under `npm run dev` (--watch), which restarts on every save and
+  // would otherwise spawn a new tab each time.
+  const watching = process.execArgv.some((a) => a.startsWith("--watch"));
+  if (watching || process.env.OPEN_BROWSER === "0") return;
   if (process.platform === "win32") spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" }).unref();
   else if (process.platform === "darwin") spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
 });

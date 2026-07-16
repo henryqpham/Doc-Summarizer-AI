@@ -4,37 +4,37 @@
 //  Ask Sage's response schemas aren't publicly documented (docs site is an SPA,
 //  SwaggerHub 404s). Rather than guess field names, this asks the live API and
 //  prints the RAW JSON. It answers:
-//    1. Does auth work?             (token exchange)
-//    2. What's the token field?     (raw shape)
-//    3. What models can you use?    -> ASKSAGE_MODEL
-//    4. What's the query response?  -> pins down the parser
+//    0. Is ASKSAGE_EMAIL actually required, or does the key alone work?
+//    1. Does auth work, and what field holds the token?
+//    2. What models can this account use?   -> ASKSAGE_MODEL
+//    3. What does /server/query return?     -> pins down the parser
+//    4. Does /server/file extract text?
 //
 //  Run:  npm run probe
-//  Needs only ASKSAGE_EMAIL / ASKSAGE_API_KEY / ASKSAGE_BASE_URL.
+//  Needs only ASKSAGE_BASE_URL + ASKSAGE_API_KEY. Email is optional on purpose:
+//  step 0 exists to find out whether it's needed at all.
 // ─────────────────────────────────────────────────────────────────────────
-// Load .env if present; otherwise fall through to the real environment.
+import { loadEnv, requireVars, requireUrl } from "../lib/env.mjs";
+
+let BASE;
 try {
-  process.loadEnvFile();
-} catch {
-  /* no .env — rely on process.env */
+  const source = loadEnv(["ASKSAGE_BASE_URL", "ASKSAGE_API_KEY"]);
+  requireVars(["ASKSAGE_BASE_URL", "ASKSAGE_API_KEY"], source);
+  BASE = requireUrl("ASKSAGE_BASE_URL");
+} catch (err) {
+  console.error(`\n  ${err.message}\n`);
+  process.exit(1);
 }
 
-const BASE = (process.env.ASKSAGE_BASE_URL || "").replace(/\/+$/, "");
 const EMAIL = (process.env.ASKSAGE_EMAIL || "").trim();
 const KEY = (process.env.ASKSAGE_API_KEY || "").trim();
 const MODEL = (process.env.ASKSAGE_MODEL || "").trim();
-
-if (!BASE || !EMAIL || !KEY) {
-  console.error("\n  Need ASKSAGE_BASE_URL, ASKSAGE_EMAIL and ASKSAGE_API_KEY in .env.\n");
-  process.exit(1);
-}
 
 let TOKEN = null;
 
 /** Never print the live token or the API key, even in a debug dump. */
 function redact(value) {
-  const json = JSON.stringify(value, null, 2) ?? "undefined";
-  let out = json;
+  let out = JSON.stringify(value, null, 2) ?? "undefined";
   if (TOKEN) out = out.split(TOKEN).join("<REDACTED-TOKEN>");
   if (KEY) out = out.split(KEY).join("<REDACTED-KEY>");
   return out;
@@ -44,74 +44,97 @@ function head(title) {
   console.log(`\n${"─".repeat(72)}\n  ${title}\n${"─".repeat(72)}`);
 }
 
-async function call(path, { body, form } = {}) {
+async function call(path, { form, body, token = TOKEN } = {}) {
   const headers = {};
-  if (TOKEN) headers["x-access-tokens"] = TOKEN;
+  if (token) headers["x-access-tokens"] = token;
   if (!form) headers["content-type"] = "application/json";
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers,
-    body: form ?? JSON.stringify(body ?? {}),
-  });
-  const text = await res.text();
-  let parsed;
+
+  let res;
   try {
-    parsed = JSON.parse(text);
+    res = await fetch(`${BASE}${path}`, {
+      method: "POST",
+      headers,
+      body: form ?? JSON.stringify(body ?? {}),
+    });
+  } catch (err) {
+    // A network/DNS failure is a config problem, not a crash. Say so plainly.
+    const why = err?.cause?.code === "ENOTFOUND" ? `Host not found — is ASKSAGE_BASE_URL right?` : err?.cause?.message || err.message;
+    console.error(`\n  Could not reach ${BASE}${path}\n\n      ${why}\n`);
+    process.exit(1);
+  }
+
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
   } catch {
-    parsed = { __nonJsonBody: text.slice(0, 500) };
+    data = { __nonJsonBody: text.slice(0, 500) };
   }
-  return { status: res.status, ok: res.ok, data: parsed };
+  return { status: res.status, ok: res.ok, data };
 }
 
-// ── 0. Can we skip the email? ─────────────────────────────────────────────
-// Ask Sage's documented flow is email + api_key -> token. But it costs nothing
-// to check whether the raw API key is accepted directly as x-access-tokens; if
-// it is, ASKSAGE_EMAIL can be dropped from .env entirely.
-head("0. Is the email actually required?  (trying the API key as a token)");
-{
-  const res = await fetch(`${BASE}/server/get-models`, {
-    method: "POST",
-    headers: { "x-access-tokens": KEY, "content-type": "application/json" },
-    body: "{}",
-  });
-  console.log(`  status: ${res.status}`);
-  if (res.ok) {
-    console.log(`  ✔ The API key works directly as a token — the email is NOT needed.
-    Tell Claude, and ASKSAGE_EMAIL can be removed from .env.`);
-  } else {
-    console.log(`  ✘ Rejected (${res.status}). The email + token exchange IS required,
-    as their docs say. Keep ASKSAGE_EMAIL in .env.`);
-  }
+console.log(`\n  Instance: ${BASE}`);
+console.log(`  Email:    ${EMAIL || "(not set — testing key-only auth)"}`);
+
+// ── 0. Is the email actually required? ────────────────────────────────────
+head("0. Is ASKSAGE_EMAIL required?   (trying the API key directly as a token)");
+const keyOnly = await call("/server/get-models", { token: KEY });
+console.log(`  status: ${keyOnly.status}`);
+
+if (keyOnly.ok) {
+  TOKEN = KEY;
+  console.log(`
+  ✔ KEY-ONLY AUTH WORKS. The API key is accepted directly as a token.
+    ASKSAGE_EMAIL is not needed — you were right.`);
+} else {
+  console.log(`
+  ✘ Rejected (${keyOnly.status}). The key alone is not accepted as a token.
+    Ask Sage requires the documented email + api_key -> token exchange.`);
+  console.log(redact(keyOnly.data));
 }
 
-// ── 1. Auth ───────────────────────────────────────────────────────────────
-head("1. POST /user/get-token-with-api-key");
-const auth = await call("/user/get-token-with-api-key", { body: { email: EMAIL, api_key: KEY } });
-console.log(`  status: ${auth.status}`);
-console.log(`  top-level keys: [${Object.keys(auth.data ?? {}).join(", ")}]`);
-console.log(redact(auth.data));
-
-if (!auth.ok) {
-  console.error("\n  Auth failed. Check email/key, and that .env saved as LF (a trailing \\r 401s).\n");
-  process.exit(1);
-}
-
-// Find the token wherever it lives.
-const flat = { ...(auth.data ?? {}), ...(auth.data?.response ?? {}) };
-TOKEN =
-  [flat.access_token, flat.token, flat.accessToken, auth.data?.response].find(
-    (v) => typeof v === "string" && v.length > 20
-  ) ?? null;
-
+// ── 1. Token exchange ─────────────────────────────────────────────────────
 if (!TOKEN) {
-  console.error("\n  Got a 200 but couldn't spot the token above. Paste this output and it'll be pinned down.\n");
-  process.exit(1);
+  if (!EMAIL) {
+    head("1. POST /user/get-token-with-api-key — CANNOT RUN");
+    console.log(`  Key-only auth failed above, and ASKSAGE_EMAIL isn't set, so there's
+  no way to authenticate. Add your Ask Sage account email to .env:
+
+      ASKSAGE_EMAIL=you@youragency.gov
+
+  then re-run "npm run probe".`);
+    process.exit(1);
+  }
+
+  head("1. POST /user/get-token-with-api-key");
+  const auth = await call("/user/get-token-with-api-key", { body: { email: EMAIL, api_key: KEY }, token: null });
+  console.log(`  status: ${auth.status}`);
+  console.log(`  top-level keys: [${Object.keys(auth.data ?? {}).join(", ")}]`);
+  console.log(redact(auth.data));
+
+  if (!auth.ok) {
+    console.error(`\n  Auth failed. Check the email/key. Note a .env saved as CRLF or with a
+  UTF-8 BOM can corrupt the key and produce a 401 that looks like a wrong key.\n`);
+    process.exit(1);
+  }
+
+  const flat = { ...(auth.data ?? {}), ...(auth.data?.response ?? {}) };
+  TOKEN = [flat.access_token, flat.token, flat.accessToken, auth.data?.response].find(
+    (v) => typeof v === "string" && v.length > 20
+  );
+
+  if (!TOKEN) {
+    console.error("\n  200 OK but no token field spotted above. Paste this output and it'll be pinned down.\n");
+    process.exit(1);
+  }
+  console.log(`\n  ✔ Token acquired (${TOKEN.length} chars).`);
+} else {
+  head("1. Token exchange — SKIPPED (not needed, key-only auth works)");
 }
-console.log(`\n  ✔ Token acquired (${TOKEN.length} chars). Field located.`);
 
 // ── 2. Models ─────────────────────────────────────────────────────────────
 head("2. POST /server/get-models   ← your ASKSAGE_MODEL comes from here");
-const models = await call("/server/get-models");
+const models = keyOnly.ok ? keyOnly : await call("/server/get-models");
 console.log(`  status: ${models.status}`);
 console.log(redact(models.data));
 
@@ -134,7 +157,7 @@ if (MODEL) {
   console.log("\n  ^ Whichever field holds the answer text is what lib/asksage.mjs must read.");
 } else {
   head("3. POST /server/query — SKIPPED");
-  console.log("  Set ASKSAGE_MODEL in .env (pick one from step 2) and re-run to see the response shape.");
+  console.log("  Pick a model from step 2, set ASKSAGE_MODEL in .env, and re-run to see the response shape.");
 }
 
 // ── 4. File extraction ────────────────────────────────────────────────────
@@ -147,5 +170,5 @@ console.log(`  top-level keys: [${Object.keys(f.data ?? {}).join(", ")}]`);
 console.log(redact(f.data));
 
 head("Done");
-console.log(`  Next: put the right model name in .env as ASKSAGE_MODEL, then run "npm start".
-  If any field name above differs from what lib/asksage.mjs guesses, paste this output.\n`);
+console.log(`  Next: set ASKSAGE_MODEL in .env from step 2, then run "npm start".
+  Paste this output if any field name differs from what lib/asksage.mjs guesses.\n`);

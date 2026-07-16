@@ -5,8 +5,9 @@
   "type": "module",
   "description": "Local document summarizer. Drag a doc, get an email-ready summary via Ask Sage.",
   "scripts": {
-    "start": "node server.mjs",
-    "probe": "node tools/probe.mjs"
+    "dev": "node --use-system-ca --watch server.mjs",
+    "start": "node --use-system-ca server.mjs",
+    "probe": "node --use-system-ca tools/probe.mjs"
   },
   "engines": {
     "node": ">=20.12"
