@@ -1,0 +1,10 @@
+# dev dependencies
+node_modules/
+
+# build output — the delivered .html contains the baked-in API key,
+# so it must NEVER be committed
+dist/*.html
+
+# misc
+.DS_Store
+*.log

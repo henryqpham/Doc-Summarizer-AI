@@ -1,0 +1,16 @@
+{
+  "name": "doc-summarizer-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Single-file, in-browser document summarizer that outputs a fixed email structure.",
+  "scripts": {
+    "build": "node build/build.mjs"
+  },
+  "devDependencies": {
+    "mammoth": "^1.6.0",
+    "pdfjs-dist": "3.11.174"
+  },
+  "comments": {
+    "pdfjs-dist": "Pinned to the 3.x UMD build, which exposes a global `pdfjsLib` usable from a classic <script>. pdf.js v4+ is ESM-only and won't work when the file is opened via file://."
+  }
+}

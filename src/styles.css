@@ -1,0 +1,105 @@
+/* Document Summarizer — minimal, clean, single-file UI. */
+
+* { box-sizing: border-box; }
+
+:root {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --ink: #1a1d21;
+  --muted: #6b7280;
+  --line: #d9dce1;
+  --accent: #2f6feb;
+  --accent-ink: #ffffff;
+  --ok: #158a4a;
+  --error: #c0392b;
+  --busy: #8a6d15;
+  --radius: 10px;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.app {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+}
+
+.app__header { text-align: center; margin-bottom: 24px; }
+.app__header h1 { margin: 0 0 6px; font-size: 26px; }
+.app__subtitle { margin: 0; color: var(--muted); }
+
+.dropzone {
+  background: var(--panel);
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 44px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone:hover,
+.dropzone:focus-visible { border-color: var(--accent); outline: none; }
+.dropzone--over { border-color: var(--accent); background: #eef3fd; }
+.dropzone__hint { margin: 0 0 4px; font-size: 17px; font-weight: 600; }
+.dropzone__sub { margin: 0; color: var(--muted); font-size: 13px; }
+
+.status {
+  min-height: 20px;
+  margin: 14px 2px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.status--busy { color: var(--busy); }
+.status--ok { color: var(--ok); }
+.status--error { color: var(--error); }
+
+.output {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.output__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.output__label { font-weight: 600; }
+.output__actions { display: flex; gap: 8px; }
+
+.output__text {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  font: 13px/1.55 ui-monospace, "Cascadia Code", Consolas, monospace;
+  color: var(--ink);
+  background: #fbfbfc;
+}
+
+.btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--accent); }
+.btn--primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn--primary:hover { filter: brightness(0.95); }
+
+.app__footer {
+  margin-top: 22px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
