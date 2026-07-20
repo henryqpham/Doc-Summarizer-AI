@@ -3,6 +3,9 @@
 // either ONE combined summary or one summary per file (POST /api/summarize-text,
 // also strictly sequential). Files never go anywhere except 127.0.0.1; the
 // local server forwards them.
+// Summaries arrive as Markdown and are shown as a formatted preview rendered
+// by markdown.js (window.MD — loaded before this file); an Edit toggle swaps
+// in the raw-text textarea, which stays the source of truth for copy/downloads.
 // All state lives in memory only — nothing is ever persisted in the browser.
 (function () {
   "use strict";
@@ -497,23 +500,39 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  // Word opens HTML saved as .doc; <pre> + pre-wrap keeps the template's
-  // line structure. Escape the text — it must never be interpreted as markup.
+  // Word opens HTML saved as .doc. The body is rebuilt from the parsed
+  // Markdown through MD.toHtml, which escapes every text node — raw model
+  // text never reaches the markup. MD.toHtml's static inline styles
+  // (Calibri, real pt heading sizes, 1pt-bordered tables with a shaded
+  // bold header row, bullet lists, ruled <hr> separators) survive Word's
+  // HTML import, so the file opens as a formatted report matching the
+  // weekly template. The mso conditional block asks Word for Print Layout
+  // instead of Web Layout.
   function wordDocBlob(text) {
-    const esc = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const body = window.MD.toHtml(window.MD.parse(text));
     const html =
-      '<html><head><meta charset="utf-8"><title>Summary</title></head><body>' +
-      `<pre style="font-family:Calibri,Arial,sans-serif;white-space:pre-wrap;">${esc}</pre>` +
+      '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+      'xmlns:w="urn:schemas-microsoft-com:office:word">' +
+      '<head><meta charset="utf-8"><title>Summary</title>' +
+      "<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View>" +
+      "<w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->" +
+      "</head>" +
+      '<body style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#111111;">' +
+      body +
       "</body></html>";
     // Leading U+FEFF (BOM) so Word detects the file as UTF-8.
     return new Blob([String.fromCharCode(0xfeff), html], { type: "application/msword" });
   }
 
   // ── result cards ──────────────────────────────────────────────────────
-  // One card per summary: label, editable textarea, Copy / .txt / .doc / PDF.
-  // Copy and every download read the textarea AT CLICK TIME, so manual edits
-  // are always included. Cards are built once and never re-rendered, so edits
-  // survive later runs; "Clear all" removes the nodes (and their listeners).
+  // One card per summary: label, formatted preview ⇄ editable textarea
+  // (Edit/Preview toggle), Copy / .txt / .doc / PDF. The summary arrives as
+  // Markdown; the preview renders it through window.MD (createElement/
+  // textContent only — it is untrusted model output). The textarea stays the
+  // single source of truth: Copy and every download read it AT CLICK TIME,
+  // so manual edits are always included. Cards are built once and never
+  // re-rendered, so edits survive later runs; "Clear all" removes the nodes
+  // (and their listeners).
   function addResultCard(label, downloadBase, summaryText, beforeNode, isCombined, listEl) {
     const card = document.createElement("article");
     card.className = "result-card";
@@ -542,14 +561,69 @@
     textarea.setAttribute("aria-label", "Editable summary: " + label);
     textarea.value = summaryText;
 
+    // Formatted preview (the default view): headings, bold labels, bullets,
+    // and real tables, echoing the Word template. Rebuilt from the CURRENT
+    // textarea value each time edit mode is left.
+    const preview = document.createElement("div");
+    preview.className = "summary-preview";
+    preview.setAttribute("aria-label", "Formatted summary: " + label);
+    function renderPreview() {
+      preview.textContent = ""; // drop the old fragment
+      preview.appendChild(window.MD.render(window.MD.parse(textarea.value)));
+    }
+    renderPreview();
+    textarea.hidden = true; // preview first; Edit reveals the raw text
+
+    // Edit ⇄ Preview toggle: one small secondary button swaps the two views.
+    let editing = false;
+    function setEditing(on) {
+      editing = on;
+      if (!on) renderPreview(); // returning to preview picks up manual edits
+      preview.hidden = on;
+      textarea.hidden = !on;
+      editBtn.textContent = on ? "Preview" : "Edit";
+      editBtn.setAttribute("aria-pressed", String(on));
+      editBtn.classList.toggle("is-active", on);
+      if (on) textarea.focus();
+    }
+    const editBtn = smallButton("Edit", () => setEditing(!editing), "btn btn-secondary");
+    editBtn.setAttribute("aria-pressed", "false");
+    editBtn.setAttribute("aria-label", "Switch between formatted preview and editable text");
+    actions.appendChild(editBtn);
+
+    // Copy lands rich (text/html — Outlook keeps headings/tables/bullets on
+    // paste) AND plain (text/plain — the raw text) in one clipboard write.
+    // Fallbacks: plain writeText, then select-for-Ctrl+C in edit mode.
     const copyBtn = smallButton("Copy", async () => {
-      if (!textarea.value) return;
+      const text = textarea.value;
+      if (!text) return;
+      const html =
+        '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#111111;">' +
+        window.MD.toHtml(window.MD.parse(text)) +
+        "</div>";
       try {
-        await navigator.clipboard.writeText(textarea.value);
-        setStatus("Copied to clipboard.", "ok");
+        if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem === "function") {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              "text/html": new Blob([html], { type: "text/html" }),
+              "text/plain": new Blob([text], { type: "text/plain" }),
+            }),
+          ]);
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          throw new Error("clipboard unavailable");
+        }
+        setStatus("Copied — paste into your email.", "ok");
       } catch {
-        textarea.select();
-        setStatus("Press Ctrl+C to copy the selected text.", "busy");
+        try {
+          await navigator.clipboard.writeText(text);
+          setStatus("Copied — paste into your email.", "ok");
+        } catch {
+          setEditing(true); // the textarea must be visible to select it
+          textarea.select();
+          setStatus("Press Ctrl+C to copy the selected text.", "busy");
+        }
       }
     }, "btn btn-secondary");
     copyBtn.textContent = "";
@@ -584,7 +658,7 @@
     bar.append(titleWrap, actions);
     const body = document.createElement("div");
     body.className = "result-body";
-    body.appendChild(textarea);
+    body.append(preview, textarea); // exactly one visible at a time
     card.append(bar, body);
     const list = listEl || $("resultlist");
     // The anchor may have been detached by "Clear all" mid-run — fall back

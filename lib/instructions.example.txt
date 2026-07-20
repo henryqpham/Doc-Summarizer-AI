@@ -4,14 +4,18 @@ ready to paste into an email.
 === THIS IS THE PLACEHOLDER TEMPLATE ===
 === Save your real one as lib/instructions.txt (gitignored) — see README ===
 
-Subject: <one concise subject line>
+The structure is GitHub-flavored Markdown — reproduce the **bold** labels
+and "- " bullets exactly as shown.
 
-Summary:
-<2-3 sentence plain-language overview>
+**Subject:** <one concise subject line>
 
-Key Points:
+**Summary:** <2-3 sentence plain-language overview>
+
+**Key Points:**
+
 - <point>
 - <point>
 
-Action Items:
+**Action Items:**
+
 - <owner> — <action> (<due date, if any>)

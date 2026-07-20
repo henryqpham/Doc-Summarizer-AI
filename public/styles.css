@@ -474,6 +474,70 @@ button:disabled { cursor: not-allowed; }
 }
 .summary-box:focus-visible { outline-offset: 0; }
 
+/* Formatted summary preview (the card's default view) — echoes the Word
+   template: sized headings, bold inline labels, bullets, ruled tables with
+   a shaded header row, hr separators. Swapped with the textarea by the
+   card's Edit ⇄ Preview button; [hidden] handles the toggling. */
+.summary-preview {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 20px 24px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+  overflow-x: auto; /* wide tables scroll inside the card */
+}
+.summary-preview > :first-child { margin-top: 0; }
+.summary-preview > :last-child { margin-bottom: 0; }
+
+.summary-preview h1,
+.summary-preview h2,
+.summary-preview h3,
+.summary-preview h4 { letter-spacing: -0.01em; line-height: 1.3; }
+.summary-preview h1 { font-size: 19px; font-weight: 700; margin: 20px 0 8px; }
+.summary-preview h2 { font-size: 16px; font-weight: 700; margin: 18px 0 6px; }
+.summary-preview h3 { font-size: 14px; font-weight: 650; margin: 14px 0 4px; }
+.summary-preview h4 { font-size: 13.5px; font-weight: 650; margin: 12px 0 4px; }
+
+.summary-preview p { margin: 6px 0; }
+
+.summary-preview ul { margin: 6px 0 10px; padding-left: 24px; }
+.summary-preview li { margin: 3px 0; }
+.summary-preview li::marker { color: var(--faint); }
+
+.summary-preview hr {
+  border: none;
+  border-top: 2px solid var(--border-strong);
+  margin: 16px 0;
+}
+
+.summary-preview table {
+  border-collapse: collapse;
+  margin: 10px 0 14px;
+  width: 100%;
+}
+.summary-preview th,
+.summary-preview td {
+  border: 1px solid var(--border-strong);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  font-size: 13px;
+}
+.summary-preview th {
+  background: var(--misc-tint-bg);
+  font-weight: 650;
+}
+
+/* Edit ⇄ Preview toggle: tinted while the raw-text editor is open. */
+.btn-secondary.is-active {
+  background: var(--indigo-tint);
+  border-color: transparent;
+  color: var(--indigo-text);
+}
+.btn-secondary.is-active:hover { background: var(--doc-tint-bg); }
+
 /* Empty state: illustration + "How it works" mini-guide. */
 .empty-state {
   flex: 1;
