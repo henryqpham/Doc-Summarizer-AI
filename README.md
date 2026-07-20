@@ -41,7 +41,14 @@ Drag one or more PDF / DOCX / TXT files in (or click to choose). Each file is
 extracted in turn and shows a **"N characters read"** count — if that number
 looks absurdly small, extraction failed and nothing gets summarized. Pick
 **one combined summary** (default) or **each file separately**, hit Summarize,
-then edit the result if needed and **Copy** or **Download .txt / .doc / PDF**.
+then edit the result if needed and **Copy** or **Download .txt / .doc / PDF**
+(downloads are date-stamped: `name_report_7_20_2026.pdf`).
+
+**Compare weeks** (second tab): add last week's exported report on the left,
+this week's on the right — or one click on **Use latest summary** — and the
+model reports what's new, what changed, what's completed, and what carried
+over. Nothing persists between sessions on purpose, so "last week" always
+arrives as the report file you downloaded back then.
 
 The output structure lives in [`lib/template.mjs`](lib/template.mjs) — that
 string is the actual product; replace the placeholder with your real email
@@ -53,6 +60,7 @@ format (no code changes needed).
 |---|---|
 | `POST /api/extract` | raw file bytes (+ `x-filename` header) → `{text, chars, filename}` |
 | `POST /api/summarize-text` | `{documents: [{filename, text}, …]}` → `{summary, chars}` (several docs → one combined summary) |
+| `POST /api/compare` | `{previous: {filename, text}, current: {…}}` → `{comparison, chars}` — week-over-week review |
 | `POST /api/summarize` | legacy one-shot: file bytes → `{summary, chars}` |
 | `GET /api/health` | `{ok, model, gov}` — powers the UI banner; no secrets |
 

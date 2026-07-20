@@ -101,7 +101,11 @@
       <section class="pane-right" aria-label="Summaries">
         <div class="pane-right-inner">
           <div class="results-header">
-            <h1>Summaries</h1>
+            <!-- View switch: this week's summaries vs the week-over-week review. -->
+            <div class="tabs" role="tablist" aria-label="View">
+              <button id="tab-summaries" class="tab is-active" type="button" role="tab" aria-selected="true" aria-controls="panel-summaries">Summaries</button>
+              <button id="tab-compare" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-compare">Compare weeks</button>
+            </div>
             <button id="clear" class="btn btn-secondary" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/>
@@ -112,6 +116,9 @@
 
           <!-- Status line (busy / ok / error), written by app.js.setStatus. -->
           <p id="status" class="statusline" role="status" aria-live="polite" hidden></p>
+
+          <!-- ── Panel 1: this week's summaries ── -->
+          <section id="panel-summaries" class="tabpanel" role="tabpanel" aria-labelledby="tab-summaries">
 
           <!-- Result cards, newest run on top. Cards are built by app.js; every
                filename/summary reaches the DOM via textContent only. -->
@@ -151,12 +158,46 @@
             </div>
           </div>
 
-          <div class="pane-footer">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 2 4 5.5v5.7c0 5 3.4 9.1 8 10.3 4.6-1.2 8-5.3 8-10.3V5.5z"/>
-            </svg>
-            <span>Nothing is saved on this computer. Documents go only to your approved Ask Sage instance.</span>
-          </div>
+          </section>
+
+          <!-- ── Panel 2: week-over-week comparison ── -->
+          <section id="panel-compare" class="tabpanel" role="tabpanel" aria-labelledby="tab-compare" hidden>
+            <div class="compare-wells">
+              <div class="well" id="well-prev" aria-label="Last week's report">
+                <div class="well-head">Last week's report</div>
+                <!-- State (empty / extracting / ready / error) rendered by app.js. -->
+                <div class="well-body" id="well-prev-body"></div>
+                <input id="well-prev-input" type="file" hidden />
+              </div>
+              <div class="well" id="well-curr" aria-label="This week's report">
+                <div class="well-head">This week's report</div>
+                <div class="well-body" id="well-curr-body"></div>
+                <input id="well-curr-input" type="file" hidden />
+              </div>
+            </div>
+
+            <button id="compare-btn" class="btn btn-primary" type="button" disabled>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m8 3-4 4 4 4"/><path d="M4 7h16"/><path d="m16 13 4 4-4 4"/><path d="M20 17H4"/>
+              </svg>
+              <span id="compare-label">Compare weeks</span>
+            </button>
+
+            <div id="comparelist" class="resultlist"></div>
+
+            <div id="compare-empty" class="empty-state">
+              <svg width="120" height="96" viewBox="0 0 120 96" fill="none" aria-hidden="true">
+                <rect x="14" y="14" width="42" height="60" rx="6" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="2"/>
+                <rect x="64" y="14" width="42" height="60" rx="6" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="2"/>
+                <path d="M22 28h26M22 37h26M22 46h18" stroke="var(--faint)" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M72 28h26M72 37h20" stroke="var(--faint)" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M72 46h26M72 55h14" stroke="var(--indigo)" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M53 84h14m-7-5 7 5-7 5" stroke="var(--indigo)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2>See what changed since last week</h2>
+              <p>Add last week's exported report on the left and this week's on the right — or use the summary you just made. The comparison lists what's new, what changed, and what carried over.</p>
+            </div>
+          </section>
         </div>
       </section>
     </main>
