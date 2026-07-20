@@ -5,6 +5,12 @@ app that sends documents to your organization's approved **Ask Sage** instance
 for text extraction and summarization (Claude Sonnet 4.5 gov). Built to handle
 CUI: everything runs on your machine, and documents travel only to Ask Sage.
 
+> **Just using the tool?** You don't need this file — everything you need is
+> in the app itself, and [USER-GUIDE.md](USER-GUIDE.md) is a plain-language
+> one-pager you can print. Curious how it works? [ARCHITECTURE.md](ARCHITECTURE.md)
+> explains it without jargon. This README is for whoever sets up and
+> maintains the tool.
+
 ```
 browser (localhost:3000)      local Node process           Ask Sage (approved)
 ────────────────────────      ──────────────────           ───────────────────
@@ -37,18 +43,13 @@ reload `.env` — restart after editing it).
 
 ## Using it
 
-Drag one or more PDF / DOCX / TXT files in (or click to choose). Each file is
-extracted in turn and shows a **"N characters read"** count — if that number
-looks absurdly small, extraction failed and nothing gets summarized. Pick
-**one combined summary** (default) or **each file separately**, hit Summarize,
-then edit the result if needed and **Copy** or **Download .txt / .doc / PDF**
-(downloads are date-stamped: `name_report_7_20_2026.pdf`).
-
-**Compare weeks** (second tab): add last week's exported report on the left,
-this week's on the right — or one click on **Use latest summary** — and the
-model reports what's new, what changed, what's completed, and what carried
-over. Nothing persists between sessions on purpose, so "last week" always
-arrives as the report file you downloaded back then.
+Day-to-day usage lives in [USER-GUIDE.md](USER-GUIDE.md) (plain language,
+printable). The two facts maintainers should know: the **"N characters read"**
+count is the tripwire that catches silent extraction failures — an absurdly
+small number means the parse failed and nothing gets summarized — and
+**nothing persists between sessions** by design, so week-over-week comparison
+always takes last week's *exported report file* as input (downloads are
+date-stamped for exactly this: `name_report_7_20_2026.pdf`).
 
 The output structure lives in [`lib/template.mjs`](lib/template.mjs) — that
 string is the actual product; replace the placeholder with your real email
