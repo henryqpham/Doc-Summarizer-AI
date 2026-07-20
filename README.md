@@ -1,127 +1,102 @@
 # Document Summarizer
 
-Drag a document (PDF / DOCX / TXT) onto a page, get an email-ready summary back
-in a fixed structure, copy it. Runs entirely on one computer against your
-approved **Ask Sage** instance.
-
-## How it works
+Drop documents in a browser, get an email-ready summary back. A small local web
+app that sends documents to your organization's approved **Ask Sage** instance
+for text extraction and summarization (Claude Sonnet 4.5 gov). Built to handle
+CUI: everything runs on your machine, and documents travel only to Ask Sage.
 
 ```
-  browser (127.0.0.1)                 this local Node process            Ask Sage
-  ─────────────────────               ────────────────────────           ─────────
-  drag file  ───────────POST bytes──▶  holds the credentials
-                                       POST /user/get-token-with-api-key ──▶ token
-                                       POST /server/file  (extract text) ──▶ text
-                                       POST /server/query (summarize)    ──▶ summary
-  show + copy ◀──────────JSON────────  
+browser (localhost:3000)      local Node process           Ask Sage (approved)
+────────────────────────      ──────────────────           ───────────────────
+drop files ──raw bytes──▶     holds credentials
+                              POST /server/file   ──▶      extracted text
+                              POST /server/query  ──▶      formatted summary
+review / copy / download ◀──  JSON
 ```
 
-**The browser never talks to Ask Sage, and never sees your credentials.**
+The browser never sees credentials and never talks to Ask Sage directly (its
+API sends no CORS headers, so a browser can't call it anyway — that's why the
+local server exists).
 
-## Why a local app and not just an HTML file?
+**Zero npm dependencies.** Node 20.12+ only.
 
-The original plan was a single self-contained `.html` file you could email. That
-is **not possible**: Ask Sage returns no `Access-Control-Allow-Origin` header, so
-a browser refuses to call it — from a `file://` page *or* any hosted origin.
-Verify it yourself, no key required:
+## Setup
 
-```bash
-curl -s -i -X OPTIONS "https://api.YOUR-INSTANCE.ai/server/query" \
-  -H "Origin: null" -H "Access-Control-Request-Method: POST" \
-  -H "Access-Control-Request-Headers: content-type,x-access-tokens" | head -25
-```
-No `access-control-allow-origin` in the response → the call must happen outside
-the browser. Hence this local process.
+1. `Copy-Item .env.example .env` and fill in `ASKSAGE_API_KEY` and
+   `ASKSAGE_BASE_URL` (your instance's `api.` host).
+2. `npm start` — if `ASKSAGE_MODEL` is unset it prints the models your account
+   can use; pick one and put it in `.env`.
+   - ⚠️ **Only use a model ending in `-gov`.** The list mixes in commercial
+     endpoints (`-com` or no suffix) — sending CUI to one is a spill. The
+     newer, shinier models are usually the commercial ones. The server and the
+     UI both warn if the model isn't `-gov`.
+3. Open **http://localhost:3000**. The server never opens windows on its own.
 
-The forced rewrite made things better: no bundled PDF libraries (and no
-[CVE-2024-4367](https://github.com/advisories/GHSA-wgrm-67xf-hhpq)), a ~30 KB app
-instead of 2 MB, credentials never in the page, and Ask Sage handles extraction —
-including images, which means scanned documents may work via its OCR.
+Use `npm run dev` for watch mode while developing (note: `--watch` does not
+reload `.env` — restart after editing it).
 
-## Setup (for whoever installs this)
+## Using it
 
-1. **Install [Node.js](https://nodejs.org/) 20.12 or newer** (`node --version` to check).
-2. Copy `.env.example` to `.env` and fill in email, API key, and base URL.
-   - ⚠️ **Save `.env` with LF line endings, not CRLF.** A trailing `\r` on the key
-     causes a 401 that looks exactly like a wrong key.
-3. **Find your model name** — don't guess it:
-   ```bash
-   npm run probe
-   ```
-   This authenticates, lists the models your account can actually use, and prints
-   the raw API responses. Put the right one in `.env` as `ASKSAGE_MODEL`.
-4. Run it:
-   ```bash
-   npm start
-   ```
-   or double-click **`start.bat`** — it launches the app and opens the browser.
+Drag one or more PDF / DOCX / TXT files in (or click to choose). Each file is
+extracted in turn and shows a **"N characters read"** count — if that number
+looks absurdly small, extraction failed and nothing gets summarized. Pick
+**one combined summary** (default) or **each file separately**, hit Summarize,
+then edit the result if needed and **Copy** or **Download .txt / .doc / PDF**.
 
-**There are zero npm dependencies.** Node 20.12+ provides `fetch`, `FormData`,
-`Blob`, and `process.loadEnvFile()` natively. Nothing to `npm install`, nothing to
-audit, no transitive CVEs.
+The output structure lives in [`lib/template.mjs`](lib/template.mjs) — that
+string is the actual product; replace the placeholder with your real email
+format (no code changes needed).
 
-## For the person using it
+## Local API
 
-Double-click **`start.bat`**. A browser tab opens. Drag a document in, wait, click
-**Copy**, paste into your email. Close the black window when you're done.
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/extract` | raw file bytes (+ `x-filename` header) → `{text, chars, filename}` |
+| `POST /api/summarize-text` | `{documents: [{filename, text}, …]}` → `{summary, chars}` (several docs → one combined summary) |
+| `POST /api/summarize` | legacy one-shot: file bytes → `{summary, chars}` |
+| `GET /api/health` | `{ok, model, gov}` — powers the UI banner; no secrets |
 
-## Configure the output
+Errors are 4xx with `{error: string}`.
 
-`lib/template.mjs` holds the structure the model must produce. **It currently
-contains a placeholder** — replace it with your real email format. That string is
-the actual product; everything else is plumbing.
+## Checks
 
-Ask Sage's `/server/query` has no `system` parameter, so the instructions are
-prepended to the document text as one message.
+- **`npm run probe`** — dumps raw Ask Sage responses (auth mode, model list,
+  response field names). Diagnostic, not required.
+- **`npm run e2e`** — ⚠️ **live**: sends two built-in harmless fixtures (a
+  sample memo embedded in the script + a generated PDF) through a running
+  server to the real Ask Sage instance. Final pre-ship check.
 
 ## Privacy
 
-- **Nothing is stored on this computer.** The document lives in memory for the
-  length of one request. No database, no cache, no localStorage, no logs — the
-  server deliberately logs no filenames or content.
-- `autocomplete="off"` on the output box stops the browser's session-restore from
-  persisting the summary to disk.
-- The server binds **`127.0.0.1` only** — never the LAN. It holds credentials; it
-  must not be reachable by other machines.
-- Requests set `dataset: "none"` (no dataset attachment or ingestion) and
-  `live: 0` (no live/internet lookup), so documents don't travel further than the
-  query itself.
+- **Nothing is stored on this machine** — no database, no cache, no browser
+  storage, no logs; documents live in memory for one request.
+- Documents go **only** to your configured Ask Sage instance. The UI makes no
+  external requests of any kind. Requests set `dataset: "none"` and `live: 0`
+  so documents don't travel further inside the platform.
+- Nuance: Ask Sage itself retains prompt history server-side. The accurate
+  claim is "nothing is stored *outside Ask Sage*", not "nothing anywhere."
+- The server binds loopback only (`127.0.0.1` / `::1`) — never the LAN.
 
-### ⚠️ Ask Sage retains prompts
+## Traps (read before touching)
 
-Ask Sage exposes `/user/get-user-logs` ("get your last prompts") and
-`/user/get-chats`, which means **prompt and chat history is retained server-side**.
-So the accurate claim is *"nothing is stored outside Ask Sage,"* not *"nothing is
-stored anywhere."* That's presumably fine — Ask Sage is the approved platform —
-but if retention of these particular documents is a concern, that's a question for
-your security team, not a code change.
+- **Node needs `--use-system-ca`** to reach the API behind TLS interception —
+  all npm scripts pass it. `node server.mjs` directly will fail with a bare
+  `fetch failed`.
+- **Ask Sage response fields are endpoint-specific** (verified live):
+  `/server/query` answers in `message`; `/server/file` in `ret`, prefixed with
+  a metadata line that gets stripped. On both, `response` can be the literal
+  status word `"OK"` — never treat it as content blindly. Don't reorder the
+  candidate lists in `lib/asksage.mjs` without re-probing.
+- **A CRLF or UTF-8-BOM `.env`** corrupts values and produces 401s that look
+  like a wrong key (`lib/env.mjs` detects and explains this).
 
-### API key handling
-
-The key lives only in `.env` on the machine running this, and is never sent to the
-browser. It is not baked into any artifact and not committed (`.env` is gitignored).
-If it's ever exposed, rotate it in Ask Sage and update `.env`.
-
-## Project layout
+## Layout
 
 ```
-server.mjs           local server: serves the UI, holds credentials, calls Ask Sage
-lib/asksage.mjs      Ask Sage client — token exchange, /server/file, /server/query
-lib/template.mjs     ⚙️ the output structure  ← EDIT THIS
-public/              the UI (index.html, app.js, styles.css)
-tools/probe.mjs      discovery: lists models, dumps raw API responses
-start.bat            double-click launcher
-.env                 your credentials (gitignored, never committed)
+server.mjs       local server: static UI + the four /api/* routes, loopback only
+lib/asksage.mjs  Ask Sage client — auth, extraction, query, field parsing
+lib/template.mjs ⭐ the output structure — replace the placeholder
+lib/env.mjs      .env loading with real diagnostics
+public/          the UI (no frameworks, no external assets)
+tools/           probe.mjs, e2e.mjs, make-test-pdf.mjs
 ```
-
-## Known gaps
-
-- **Response field names are inferred.** Ask Sage's schemas aren't publicly
-  documented (docs site is an SPA; SwaggerHub 404s), so `lib/asksage.mjs` tries the
-  plausible field names and fails with a precise diagnostic naming what it actually
-  received. `npm run probe` settles it against the live API.
-- **`live: 0` is set defensively.** Their sample uses `live: 1`; the parameter's
-  exact meaning isn't documented. If it turns out not to be internet lookup, this
-  is just a harmless default.
-- **Scanned PDFs** depend on Ask Sage's OCR. If extraction returns nothing, the app
-  says so clearly rather than summarizing an empty document.

@@ -6,8 +6,8 @@
 # dependencies (there are none, but just in case)
 node_modules/
 
-# dead build output from the v0.1 single-file architecture
-dist/
+# generated test fixture — recreated on demand by tools/make-test-pdf.mjs
+test/fixtures/
 
 # misc
 .DS_Store

@@ -7,51 +7,161 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="app">
-      <header class="app__header">
-        <h1>Document Summarizer</h1>
-        <p class="app__subtitle">Drop a document. Copy the summary into your email.</p>
-      </header>
+    <!-- ============ App bar ============ -->
+    <header class="appbar">
+      <div class="brand">
+        <div class="logo-tile" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/>
+            <path d="M14 2v5h5"/>
+            <path d="M9 13h6M9 17h4"/>
+          </svg>
+        </div>
+        <span class="wordmark">Document Summarizer</span>
+      </div>
 
-      <section
-        id="dropzone"
-        class="dropzone"
-        role="button"
-        tabindex="0"
-        aria-label="Drop a document or click to choose a file"
-      >
-        <p class="dropzone__hint">Drop a PDF, DOCX, or TXT file here</p>
-        <p class="dropzone__sub">or click to choose a file</p>
-        <input id="filepicker" class="dropzone__input" type="file" hidden />
+      <div class="appbar-right">
+        <!-- Filled by app.js when /api/health is ok AND the model is "-gov":
+             monospace model name + green GOV pill. -->
+        <span id="modelinfo" class="model-chip" hidden></span>
+        <span class="appbar-divider" aria-hidden="true"></span>
+        <span class="local-only">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="4" y="11" width="16" height="10" rx="2"/>
+            <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+          </svg>
+          <span>Local only</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- Filled by app.js from GET /api/health: hidden when healthy, red when
+         the server is unreachable or the model isn't a "-gov" endpoint. -->
+    <div id="banner" class="banner-offline" role="alert" hidden></div>
+
+    <!-- ============ Workspace ============ -->
+    <main class="workspace">
+      <!-- ------ Left pane: intake ------ -->
+      <section class="pane-left" aria-label="Add documents">
+        <div class="pane-left-scroll">
+          <section
+            id="dropzone"
+            class="dropzone"
+            role="button"
+            tabindex="0"
+            aria-label="Drop documents or click to choose files"
+          >
+            <div class="dz-icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/>
+                <path d="M12 12v9"/>
+                <path d="m8 16 4-4 4 4"/>
+              </svg>
+            </div>
+            <h2>Drop PDF, DOCX, or TXT files here</h2>
+            <p>or <span class="dz-link">click to choose</span></p>
+            <input id="filepicker" class="dropzone__input" type="file" multiple hidden />
+          </section>
+
+          <!-- The queue: one row per file with its extraction state and
+               Retry / Remove actions. Rows rendered entirely by app.js. -->
+          <section id="queue" aria-label="File queue" hidden>
+            <div class="section-label">
+              <span>Files</span>
+              <span id="filecount" class="count"></span>
+            </div>
+            <ul id="filelist" class="file-list"></ul>
+          </section>
+        </div>
+
+        <div class="pane-left-footer">
+          <fieldset class="segmented">
+            <legend class="sr-only">Summary mode</legend>
+            <label class="seg-option">
+              <input type="radio" name="mode" value="combined" checked />
+              <span>One combined summary</span>
+            </label>
+            <label class="seg-option">
+              <input type="radio" name="mode" value="separate" />
+              <span>Each file separately</span>
+            </label>
+          </fieldset>
+          <button id="summarize" class="btn btn-primary" type="button" disabled>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2.5l2.1 6.3 6.4 2.2-6.4 2.2-2.1 6.3-2.1-6.3-6.4-2.2 6.4-2.2z"/>
+              <path d="M19 15.5l1 2.7 2.7 1-2.7 1-1 2.7-1-2.7-2.7-1 2.7-1z" opacity=".75"/>
+            </svg>
+            <!-- Label text set by app.js (updateSummarizeButton). -->
+            <span id="summarize-label">Summarize</span>
+          </button>
+        </div>
       </section>
 
-      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <!-- ------ Right pane: output ------ -->
+      <section class="pane-right" aria-label="Summaries">
+        <div class="pane-right-inner">
+          <div class="results-header">
+            <h1>Summaries</h1>
+            <button id="clear" class="btn btn-secondary" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/>
+              </svg>
+              Clear all
+            </button>
+          </div>
 
-      <section class="output">
-        <div class="output__bar">
-          <label for="output" class="output__label">Summary</label>
-          <div class="output__actions">
-            <button id="copy" class="btn btn--primary" type="button">Copy</button>
-            <button id="clear" class="btn" type="button">Clear</button>
+          <!-- Status line (busy / ok / error), written by app.js.setStatus. -->
+          <p id="status" class="statusline" role="status" aria-live="polite" hidden></p>
+
+          <!-- Result cards, newest run on top. Cards are built by app.js; every
+               filename/summary reaches the DOM via textContent only. -->
+          <div id="results" hidden>
+            <div id="resultlist" class="resultlist"></div>
+          </div>
+
+          <!-- Shown while there are no result cards; hidden by app.js once
+               the first card lands, shown again after "Clear all". -->
+          <div id="emptystate" class="empty-state">
+            <svg width="120" height="96" viewBox="0 0 120 96" fill="none" aria-hidden="true">
+              <rect x="30" y="14" width="52" height="66" rx="6" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="2"/>
+              <rect x="40" y="8" width="52" height="66" rx="6" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="2"/>
+              <path d="M50 24h32M50 33h32M50 42h22" stroke="var(--faint)" stroke-width="2.5" stroke-linecap="round"/>
+              <path d="M50 51h18" stroke="var(--dashed)" stroke-width="2.5" stroke-linecap="round"/>
+              <path d="M97 54v14M90 61h14" stroke="var(--indigo)" stroke-width="3" stroke-linecap="round"/>
+              <path d="M22 58v8M18 62h8" stroke="var(--dashed)" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+            <h2>Summaries appear here</h2>
+            <p>Drop a document on the left to get started. Your email-ready summary will show up in this panel.</p>
+            <div class="howit">
+              <h3>How it works</h3>
+              <ol>
+                <li>
+                  <span class="step-num" aria-hidden="true">1</span>
+                  <span class="step-text"><strong>Drop</strong> — add PDF, DOCX, or TXT files.</span>
+                </li>
+                <li>
+                  <span class="step-num" aria-hidden="true">2</span>
+                  <span class="step-text"><strong>Summarize</strong> — your approved AI reads and condenses them.</span>
+                </li>
+                <li>
+                  <span class="step-num" aria-hidden="true">3</span>
+                  <span class="step-text"><strong>Copy or download</strong> — paste the result straight into an email.</span>
+                </li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="pane-footer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 2 4 5.5v5.7c0 5 3.4 9.1 8 10.3 4.6-1.2 8-5.3 8-10.3V5.5z"/>
+            </svg>
+            <span>Nothing is saved on this computer. Documents go only to your approved Ask Sage instance.</span>
           </div>
         </div>
-        <!-- autocomplete="off" prevents the browser's session-restore from
-             persisting this field's contents to disk. -->
-        <textarea
-          id="output"
-          class="output__text"
-          rows="16"
-          placeholder="The formatted summary will appear here…"
-          spellcheck="false"
-          autocomplete="off"
-        ></textarea>
       </section>
-
-      <footer class="app__footer">
-        Nothing is saved on this computer. Documents go only to your approved Ask Sage instance.
-      </footer>
     </main>
 
+    <script src="pdfgen.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
