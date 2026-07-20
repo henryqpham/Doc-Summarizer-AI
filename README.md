@@ -1,122 +1,117 @@
 # Document Summarizer
 
-Drop documents in a browser, get an email-ready summary back. A small local web
-app that sends documents to your organization's approved **Ask Sage** instance
-for text extraction and summarization (Claude Sonnet 4.5 gov). Built to handle
-CUI: everything runs on your machine, and documents travel only to Ask Sage.
+**Drop documents in. Get an email-ready summary back. Copy, paste, send.**
 
-> **Just using the tool?** You don't need this file — everything you need is
-> in the app itself, and [USER-GUIDE.md](USER-GUIDE.md) is a plain-language
-> one-pager you can print. Curious how it works? [ARCHITECTURE.md](ARCHITECTURE.md)
-> explains it without jargon. This README is for whoever sets up and
-> maintains the tool.
+Runs entirely on your own computer. Documents go only to NASA's approved
+Ask Sage AI service — nowhere else, and nothing is saved locally. Built for
+CUI. Zero dependencies (Node 20.12+ only).
 
+| I want to… | Read |
+|---|---|
+| Use the tool | [USER-GUIDE.md](USER-GUIDE.md) — one plain-language page |
+| Understand how it works | [ARCHITECTURE.md](ARCHITECTURE.md) — no jargon |
+| See the limits & rules | [REQUIREMENTS.md](REQUIREMENTS.md) |
+| Set it up / maintain it | this file |
+
+## Run it
+
+```bash
+# 1. create your settings file and fill in the two values
+Copy-Item .env.example .env     # ASKSAGE_API_KEY + ASKSAGE_BASE_URL
+
+# 2. start it (prints your usable models if ASKSAGE_MODEL is blank)
+npm start
+
+# 3. open the app
+#    http://localhost:3000
 ```
-browser (localhost:3000)      local Node process           Ask Sage (approved)
-────────────────────────      ──────────────────           ───────────────────
-drop files ──raw bytes──▶     holds credentials
-                              POST /server/file   ──▶      extracted text
-                              POST /server/query  ──▶      formatted summary
-review / copy / download ◀──  JSON
-```
 
-The browser never sees credentials and never talks to Ask Sage directly (its
-API sends no CORS headers, so a browser can't call it anyway — that's why the
-local server exists).
+⚠️ **Model must end in `-gov`.** The model list mixes government and
+commercial endpoints — sending CUI to a commercial one is a spill. The app
+warns loudly if the model isn't `-gov`.
 
-**Zero npm dependencies.** Node 20.12+ only.
+## What it does
 
-## Setup
+- Summarizes one or many documents — **one combined summary** or **one per file**
+- **Compare weeks** — last week's report vs this week's: new / changed / done / still open
+- Edit the result, then **Copy** or download **.txt / .doc / PDF** (date-stamped)
+- Clear errors instead of silent failures — the *"N characters read"* count
+  exposes unreadable scans before anything gets summarized
 
-1. `Copy-Item .env.example .env` and fill in `ASKSAGE_API_KEY` and
-   `ASKSAGE_BASE_URL` (your instance's `api.` host).
-2. `npm start` — if `ASKSAGE_MODEL` is unset it prints the models your account
-   can use; pick one and put it in `.env`.
-   - ⚠️ **Only use a model ending in `-gov`.** The list mixes in commercial
-     endpoints (`-com` or no suffix) — sending CUI to one is a spill. The
-     newer, shinier models are usually the commercial ones. The server and the
-     UI both warn if the model isn't `-gov`.
-3. Open **http://localhost:3000**. The server never opens windows on its own.
+## For maintainers
 
-Use `npm run dev` for watch mode while developing (note: `--watch` does not
-reload `.env` — restart after editing it).
-
-## Using it
-
-Day-to-day usage lives in [USER-GUIDE.md](USER-GUIDE.md) (plain language,
-printable). The two facts maintainers should know: the **"N characters read"**
-count is the tripwire that catches silent extraction failures — an absurdly
-small number means the parse failed and nothing gets summarized — and
-**nothing persists between sessions** by design, so week-over-week comparison
-always takes last week's *exported report file* as input (downloads are
-date-stamped for exactly this: `name_report_7_20_2026.pdf`).
-
-The output structure lives in [`lib/template.mjs`](lib/template.mjs) — that
-string is the actual product; replace the placeholder with your real email
-format (no code changes needed, and add one filled-in example when you do —
-examples enforce a format better than instructions).
-
-How the prompt is built (deliberate — don't "tidy" it): **documents first,
-instructions last** (Anthropic's long-context guidance; measurably better on
-long inputs). Documents travel inside tags whose names carry a fresh random
-suffix per request, and the rules bind that content to data-status — so a
-document containing "ignore your instructions…" or a fake closing tag can't
-hijack the summary. This *reduces* prompt-injection risk; the human review
-before sending remains the final defense. Combined summaries attribute facts
-to their source document, and missing information comes back as
-"Not stated in document." instead of a guess.
-
-## Local API
+<details>
+<summary><strong>Local API</strong></summary>
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/extract` | raw file bytes (+ `x-filename` header) → `{text, chars, filename}` |
-| `POST /api/summarize-text` | `{documents: [{filename, text}, …]}` → `{summary, chars}` (several docs → one combined summary) |
-| `POST /api/compare` | `{previous: {filename, text}, current: {…}}` → `{comparison, chars}` — week-over-week review |
+| `POST /api/extract` | file bytes (+ `x-filename` header) → `{text, chars, filename}` |
+| `POST /api/summarize-text` | `{documents: [{filename, text}, …]}` → `{summary, chars}` |
+| `POST /api/compare` | `{previous, current}` → `{comparison, chars}` |
 | `POST /api/summarize` | legacy one-shot: file bytes → `{summary, chars}` |
-| `GET /api/health` | `{ok, model, gov}` — powers the UI banner; no secrets |
+| `GET /api/health` | `{ok, model, gov}` — no secrets |
 
 Errors are 4xx with `{error: string}`.
+</details>
 
-## Checks
+<details>
+<summary><strong>Traps — read before changing anything</strong></summary>
 
-- **`npm run probe`** — dumps raw Ask Sage responses (auth mode, model list,
-  response field names). Diagnostic, not required.
-- **`npm run e2e`** — ⚠️ **live**: sends two built-in harmless fixtures (a
-  sample memo embedded in the script + a generated PDF) through a running
-  server to the real Ask Sage instance. Final pre-ship check.
-
-## Privacy
-
-- **Nothing is stored on this machine** — no database, no cache, no browser
-  storage, no logs; documents live in memory for one request.
-- Documents go **only** to your configured Ask Sage instance. The UI makes no
-  external requests of any kind. Requests set `dataset: "none"` and `live: 0`
-  so documents don't travel further inside the platform.
-- Nuance: Ask Sage itself retains prompt history server-side. The accurate
-  claim is "nothing is stored *outside Ask Sage*", not "nothing anywhere."
-- The server binds loopback only (`127.0.0.1` / `::1`) — never the LAN.
-
-## Traps (read before touching)
-
-- **Node needs `--use-system-ca`** to reach the API behind TLS interception —
-  all npm scripts pass it. `node server.mjs` directly will fail with a bare
-  `fetch failed`.
+- **Node needs `--use-system-ca`** (NASA TLS interception). All npm scripts
+  pass it; `node server.mjs` directly fails with a bare `fetch failed`.
 - **Ask Sage response fields are endpoint-specific** (verified live):
-  `/server/query` answers in `message`; `/server/file` in `ret`, prefixed with
-  a metadata line that gets stripped. On both, `response` can be the literal
-  status word `"OK"` — never treat it as content blindly. Don't reorder the
-  candidate lists in `lib/asksage.mjs` without re-probing.
-- **A CRLF or UTF-8-BOM `.env`** corrupts values and produces 401s that look
-  like a wrong key (`lib/env.mjs` detects and explains this).
+  `/server/query` answers in `message`; `/server/file` in `ret` behind a
+  metadata line that gets stripped. `response` can be the literal status word
+  `"OK"` — never treat it as content. Don't reorder the candidate lists in
+  `lib/asksage.mjs` without re-probing (`npm run probe`).
+- **CRLF or UTF-8-BOM in `.env`** corrupts values → 401s that look like a
+  wrong key. `lib/env.mjs` detects and explains this.
+- `npm run dev` (watch mode) does **not** reload `.env` — restart after
+  editing it.
+</details>
 
-## Layout
+<details>
+<summary><strong>Prompt design (deliberate — don't "tidy" it)</strong></summary>
+
+- **Documents first, instructions last** — Anthropic's long-context guidance;
+  measurably better on long inputs.
+- Documents travel in tags with a **fresh random suffix per request**, bound
+  to data-status by explicit rules — a document saying "ignore your
+  instructions…" or faking a closing tag can't hijack the summary. This
+  *reduces* injection risk; human review before sending is the final defense.
+- Combined summaries **attribute facts to their source document**; missing
+  info comes back as `"Not stated in document."` — never a guess.
+- `temperature: 0` → same document in, same summary out (by design).
+- The output template in `lib/template.mjs` is **still a placeholder** —
+  swap in the real email format (add one filled-in example when you do).
+</details>
+
+<details>
+<summary><strong>Privacy model</strong></summary>
+
+- Nothing stored on this machine: no database, cache, browser storage, or
+  content logs — documents live in memory for one request.
+- The UI makes zero external requests. API calls set `dataset: "none"` and
+  `live: 0` so documents don't travel further inside the platform.
+- Ask Sage retains prompt history server-side — the accurate claim is
+  "nothing stored *outside Ask Sage*", not "nothing anywhere."
+- Server binds loopback only (`127.0.0.1` / `::1`) — never the LAN.
+</details>
+
+<details>
+<summary><strong>Checks & file layout</strong></summary>
+
+- `npm run probe` — dumps raw Ask Sage responses (auth mode, models, field
+  names). Diagnostic.
+- `npm run e2e` — ⚠️ **live**: sends two harmless built-in fixtures through a
+  running server to the real Ask Sage. Final pre-ship check.
 
 ```
-server.mjs       local server: static UI + the four /api/* routes, loopback only
+server.mjs       local server: static UI + the /api/* routes, loopback only
 lib/asksage.mjs  Ask Sage client — auth, extraction, query, field parsing
-lib/template.mjs ⭐ the output structure — replace the placeholder
+lib/template.mjs ⭐ output structure — replace the placeholder
 lib/env.mjs      .env loading with real diagnostics
 public/          the UI (no frameworks, no external assets)
 tools/           probe.mjs, e2e.mjs, make-test-pdf.mjs
 ```
+</details>
