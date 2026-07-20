@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+# the real output template (may be sensitive) — same pattern as .env:
+# the tracked lib/instructions.example.txt is the placeholder fallback
+lib/instructions.txt
+
 # dependencies (there are none, but just in case)
 node_modules/
 

@@ -8,6 +8,7 @@
     "dev": "node --use-system-ca --watch server.mjs",
     "start": "node --use-system-ca server.mjs",
     "probe": "node --use-system-ca tools/probe.mjs",
+    "check-template": "node tools/check-template.mjs",
     "e2e": "node --use-system-ca tools/e2e.mjs"
   },
   "engines": {

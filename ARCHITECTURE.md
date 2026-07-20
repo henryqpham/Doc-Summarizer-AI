@@ -1,7 +1,5 @@
 # How this app works (the simple version)
 
-*No computer-science background needed.*
-
 ## The one-sentence version
 
 You drop a document onto a web page; a small helper program on your own
@@ -86,7 +84,8 @@ surprises, and next week's comparison sees real changes, not reworded ones.
 | The screen you see | `public/` | the web page and its look |
 | The helper program | `server.mjs` | the middleman with the badge |
 | Talking to Ask Sage | `lib/asksage.mjs` | knows how to phrase requests to the AI service |
-| The instruction sheets | `lib/template.mjs` | the summary + comparison formats (⭐ edit this) |
+| The summary format | `lib/instructions.txt` | ⭐ plain text file holding the email structure (private, like `.env`; `lib/instructions.example.txt` is the placeholder) |
+| The prompt assembly | `lib/template.mjs` | wraps documents + rules + the format into one request |
 | Reading your settings | `lib/env.mjs` | loads `.env` and explains what's wrong if it's broken |
 | Your key + settings | `.env` | private, stays on this computer, never shared |
 | Odd jobs | `tools/` | diagnostics and a full live test |

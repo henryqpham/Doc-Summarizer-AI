@@ -1,0 +1,17 @@
+Summarize the document(s) above into the exact structure that follows,
+ready to paste into an email.
+
+=== THIS IS THE PLACEHOLDER TEMPLATE ===
+=== Save your real one as lib/instructions.txt (gitignored) — see README ===
+
+Subject: <one concise subject line>
+
+Summary:
+<2-3 sentence plain-language overview>
+
+Key Points:
+- <point>
+- <point>
+
+Action Items:
+- <owner> — <action> (<due date, if any>)
