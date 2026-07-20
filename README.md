@@ -52,7 +52,18 @@ arrives as the report file you downloaded back then.
 
 The output structure lives in [`lib/template.mjs`](lib/template.mjs) — that
 string is the actual product; replace the placeholder with your real email
-format (no code changes needed).
+format (no code changes needed, and add one filled-in example when you do —
+examples enforce a format better than instructions).
+
+How the prompt is built (deliberate — don't "tidy" it): **documents first,
+instructions last** (Anthropic's long-context guidance; measurably better on
+long inputs). Documents travel inside tags whose names carry a fresh random
+suffix per request, and the rules bind that content to data-status — so a
+document containing "ignore your instructions…" or a fake closing tag can't
+hijack the summary. This *reduces* prompt-injection risk; the human review
+before sending remains the final defense. Combined summaries attribute facts
+to their source document, and missing information comes back as
+"Not stated in document." instead of a guess.
 
 ## Local API
 

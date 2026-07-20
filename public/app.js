@@ -881,6 +881,14 @@
     $("tab-compare").addEventListener("click", () => switchTab("compare"));
     $("compare-btn").addEventListener("click", compareWeeks);
 
+    // Limits dialog: native <dialog> gives Esc + focus handling for free;
+    // clicking the backdrop (the dialog element itself) also closes it.
+    $("limits").addEventListener("click", () => $("limits-dialog").showModal());
+    $("limits-close").addEventListener("click", () => $("limits-dialog").close());
+    $("limits-dialog").addEventListener("click", (e) => {
+      if (e.target === $("limits-dialog")) $("limits-dialog").close();
+    });
+
     for (const key of ["prev", "curr"]) {
       const ids = wellIds(key);
       const well = $(ids.well);

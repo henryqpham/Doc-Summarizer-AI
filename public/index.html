@@ -32,8 +32,40 @@
           </svg>
           <span>Local only</span>
         </span>
+        <button id="limits" class="btn btn-secondary" type="button" aria-haspopup="dialog">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+          </svg>
+          Limits
+        </button>
       </div>
     </header>
+
+    <!-- "What can this thing take?" — the end-user subset of REQUIREMENTS.md.
+         Native <dialog>: Esc closes it, focus is trapped, backdrop for free. -->
+    <dialog id="limits-dialog" class="limits-dialog" aria-labelledby="limits-title">
+      <div class="limits-head">
+        <h2 id="limits-title">Good to know</h2>
+        <button id="limits-close" class="btn btn-secondary" type="button">Close</button>
+      </div>
+
+      <dl class="limits-list">
+        <dt>What files can I drop?</dt>
+        <dd>PDF and Word documents work best. Plain text, PowerPoint, and Excel files are fine too. Drop as many as you like — they'll take turns automatically.</dd>
+
+        <dt>How much can it handle?</dt>
+        <dd>A few hundred pages at a time. If you give it too much, it simply tells you — nothing gets lost or cut off. Just do it in smaller batches.</dd>
+
+        <dt>What about scanned paper?</dt>
+        <dd>If a PDF is really just a photo of paper, there may be no text for the computer to read. You'll get a clear message instead of a made-up summary. Tip: after each file, look at the <em>"characters read"</em> number — a tiny number for a big document means it couldn't be read properly.</dd>
+
+        <dt>Where do my documents go?</dt>
+        <dd>Straight to Ask Sage, NASA's approved AI service — and nowhere else. This tool was built for sensitive work documents (CUI), and Ask Sage is the approved place to process them. Nothing is ever saved on this computer; Ask Sage keeps its own record on the approved side, like any official system. As always, classified material stays in classified systems — never here.</dd>
+
+        <dt>Before you paste it into an email</dt>
+        <dd>Read the summary first, and double-check a few numbers, dates, and names against the original document. If you see <em>"Not stated in document"</em>, the document really didn't say — the tool never fills gaps with guesses. The email is yours; the AI only drafts it.</dd>
+      </dl>
+    </dialog>
 
     <!-- Filled by app.js from GET /api/health: hidden when healthy, red when
          the server is unreachable or the model isn't a "-gov" endpoint. -->
