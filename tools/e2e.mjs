@@ -202,6 +202,41 @@ if (txtExtract && pdfExtract) {
   fail("summarize-text (combined, 2 docs)", "skipped — an extraction failed");
 }
 
+// 6b. summarize WITH a prior-week report attached — exercises the
+// trend/"key changes" grounding path (previous is optional in the API).
+const PREV_REPORT = [
+  "# Administrator Update",
+  "",
+  "**Week Ending:** last week (fictional fixture)",
+  "",
+  "**Overall Assessment:** Garage B restriping Phase 1 in progress.",
+  "",
+  "# Watch Items",
+  "",
+  "| Item | Status | Trend |",
+  "| --- | --- | --- |",
+  "| Paint cure schedule | 🟡 | ↔ |",
+  "| Lightning mast repair | 🟡 | ↔ |",
+].join("\n");
+if (txtExtract) {
+  try {
+    const r = await api("/api/summarize-text", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        documents: [{ filename: "sample-memo.txt", text: txtExtract.text }],
+        previous: { filename: "last-week-report.txt", text: PREV_REPORT },
+      }),
+    });
+    pass("summarize-text (with last week's report)", `${r.chars} chars in`);
+    console.log(`        summary: ${snip(r.summary)}`);
+  } catch (err) {
+    fail("summarize-text (with last week's report)", err);
+  }
+} else {
+  fail("summarize-text (with last week's report)", "skipped — txt extraction failed");
+}
+
 // 7. legacy one-shot /api/summarize
 try {
   const r = await api("/api/summarize", {

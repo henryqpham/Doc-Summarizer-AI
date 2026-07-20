@@ -18,23 +18,31 @@ running: start it again, then reload the page.
 
 ## Making a summary
 
-1. **Drag your documents** onto the left panel (or click it to choose files).
-   PDF and Word work best. Several files at once is fine — they take turns.
-2. **Glance at the green number** that appears next to each file, like
+1. **Add last week's report** to the box at the top of the left panel — it's
+   the file you downloaded last week. This is how the tool knows what "since
+   last week" means: the statuses, trends, and key changes in your new report
+   are judged against what you actually reported, not guessed. Writing your
+   very first report? Tick the **first-report box** instead. (The Summarize
+   button stays off until you've done one or the other.)
+2. **Drag this week's documents** onto the panel below (or click it to choose
+   files). PDF and Word work best. Several files at once is fine — they take
+   turns.
+3. **Glance at the green number** that appears next to each file, like
    "9,138 characters read." That's how much text was found. A tiny number on
    a big document means it couldn't be read (probably a scanned photo of
    paper) — the app will say so rather than guess.
-3. Choose **one combined summary** of everything, or **each file
+4. Choose **one combined summary** of everything, or **each file
    separately** — then click **Summarize**.
-4. The summary appears on the right. **You can edit it right there.**
-5. **Copy** it into your email, or download it as a Word file, PDF, or
+5. The summary appears on the right. **You can edit it right there.**
+6. **Copy** it into your email, or download it as a Word file, PDF, or
    plain text. Downloads are named with today's date, like
-   `combined_report_7_20_2026.pdf` — keep them; next week's comparison
-   uses them.
+   `combined_report_7_20_2026.pdf` — keep them; next week starts by adding
+   this file as "last week's report."
 
-## Comparing to last week
+## Comparing two finished reports
 
-Click **Compare weeks** at the top right.
+The **Compare weeks** tab (top right) is for reviewing two finished reports
+side by side — separate from making a summary.
 
 - Left box: add **last week's report** (the file you downloaded back then).
 - Right box: add this week's — or just click **"Use latest summary"** if you

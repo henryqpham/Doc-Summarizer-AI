@@ -123,6 +123,109 @@
     return `${d.getMonth() + 1}_${d.getDate()}_${d.getFullYear()}`;
   }
 
+  // ── step 1: last week's report ────────────────────────────────────────
+  // Loaded from the file exported last week; rides along with every
+  // summarize call so trends/statuses/"key changes" are judged against real
+  // prior-week evidence. Gate: Summarize stays off until this is ready or
+  // the "first report" box is ticked.
+  const prevWell = { status: "empty", filename: "", text: "", chars: 0, error: "" };
+
+  function renderPrevWell() {
+    const well = $("prev-well");
+    const body = $("prev-well-body");
+    well.classList.toggle("is-ready", prevWell.status === "ready");
+    well.classList.toggle("is-error", prevWell.status === "error");
+    body.textContent = ""; // rebuild; textContent everywhere — never innerHTML
+
+    if (prevWell.status === "extracting") {
+      const line = document.createElement("span");
+      line.append(spinnerEl(), document.createTextNode(" Extracting…"));
+      body.appendChild(line);
+    } else if (prevWell.status === "ready") {
+      const row = document.createElement("div");
+      row.className = "well-file";
+      const type = fileTypeClass(prevWell.filename);
+      const ftype = document.createElement("div");
+      ftype.className = "ftype ftype-" + type;
+      ftype.appendChild(svgIcon(type === "doc" ? ICON_DOC : ICON_FILE));
+      const main = document.createElement("div");
+      main.className = "file-main";
+      const name = document.createElement("div");
+      name.className = "file-name";
+      name.textContent = prevWell.filename;
+      const meta = document.createElement("div");
+      meta.className = "file-meta";
+      meta.appendChild(statusPill("green", `${prevWell.chars.toLocaleString()} characters read`, { withCheck: true }));
+      main.append(name, meta);
+      const actions = document.createElement("div");
+      actions.className = "well-actions";
+      actions.appendChild(
+        smallButton("Remove", () => {
+          Object.assign(prevWell, { status: "empty", filename: "", text: "", chars: 0, error: "" });
+          renderPrevWell();
+          updateSummarizeButton();
+        })
+      );
+      row.append(ftype, main, actions);
+      body.appendChild(row);
+    } else {
+      if (prevWell.status === "error") {
+        body.appendChild(statusPill("red", prevWell.error));
+      } else {
+        const hint = document.createElement("span");
+        hint.textContent = "Drop last week's report here, or";
+        body.appendChild(hint);
+      }
+      body.appendChild(
+        smallButton(prevWell.status === "error" ? "choose another file" : "choose a file", (e) => {
+          e.stopPropagation();
+          $("prev-well-input").click();
+        }, "link-btn")
+      );
+    }
+    // The first-report checkbox only matters while there's no report loaded.
+    $("firstreport-row").hidden = prevWell.status === "ready";
+    updateSummarizeButton();
+  }
+
+  async function setPrevFile(file) {
+    if (!file) return;
+    const name = file.name || "document";
+    if (file.size === 0) {
+      Object.assign(prevWell, { status: "error", filename: name, text: "", chars: 0, error: "Empty file — nothing to read." });
+      renderPrevWell();
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      Object.assign(prevWell, { status: "error", filename: name, text: "", chars: 0, error: "Over the 25 MB limit — try a smaller file." });
+      renderPrevWell();
+      return;
+    }
+    Object.assign(prevWell, { status: "extracting", filename: name, text: "", chars: 0, error: "" });
+    renderPrevWell();
+    try {
+      const res = await fetchWithTimeout(
+        "/api/extract",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/octet-stream",
+            "x-filename": encodeURIComponent(name),
+          },
+          body: file,
+        },
+        LONG_TIMEOUT_MS,
+        TIMEOUT_MESSAGE
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+      Object.assign(prevWell, { status: "ready", filename: name, text: data.text, chars: data.chars, error: "" });
+    } catch (err) {
+      Object.assign(prevWell, { status: "error", filename: name, text: "", chars: 0, error: err.message || String(err) });
+    }
+    renderPrevWell();
+  }
+
   // Tinted status line in the right pane: spinner while busy, check when ok,
   // warning triangle on error. Text always lands via createTextNode.
   function setStatus(msg, kind) {
@@ -287,11 +390,17 @@
     updateSummarizeButton();
   }
 
+  // Step 1 satisfied? Last week's report loaded, or "first report" ticked.
+  function priorGateOpen() {
+    return prevWell.status === "ready" || $("firstreport").checked;
+  }
+
   function updateSummarizeButton() {
     const btn = $("summarize");
     const ready = queue.filter((f) => f.status === "ready").length;
     const pending = queue.some((f) => f.status === "queued" || f.status === "extracting");
-    btn.disabled = summarizing || pending || ready === 0;
+    const gate = priorGateOpen();
+    btn.disabled = summarizing || pending || ready === 0 || !gate;
     // Only the label span — writing btn.textContent would wipe the sparkle icon.
     $("summarize-label").textContent = summarizing
       ? "Summarizing…"
@@ -302,6 +411,8 @@
             ? `Summarize ${ready} documents separately`
             : `Summarize ${ready} documents together`
           : "Summarize";
+    // Explain the only non-obvious blocker: files are ready but step 1 isn't.
+    $("gate-hint").hidden = !(ready > 0 && !pending && !summarizing && !gate);
   }
 
   function addFiles(fileList) {
@@ -382,14 +493,20 @@
 
   // ── summarize ─────────────────────────────────────────────────────────
   async function requestSummary(docs) {
+    const body = {
+      documents: docs.map((f) => ({ filename: f.name, text: f.text })),
+    };
+    // Last week's report rides along so trends/"key changes" are judged
+    // against real prior-week evidence. Omitted entirely on a first report.
+    if (prevWell.status === "ready") {
+      body.previous = { filename: prevWell.filename, text: prevWell.text };
+    }
     const res = await fetchWithTimeout(
       "/api/summarize-text",
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          documents: docs.map((f) => ({ filename: f.name, text: f.text })),
-        }),
+        body: JSON.stringify(body),
       },
       LONG_TIMEOUT_MS,
       TIMEOUT_MESSAGE
@@ -401,7 +518,7 @@
 
   async function summarize() {
     const ready = queue.filter((f) => f.status === "ready");
-    if (!ready.length || summarizing) return;
+    if (!ready.length || summarizing || !priorGateOpen()) return;
     summarizing = true;
     setModeDisabled(true);
     updateSummarizeButton();
@@ -432,7 +549,7 @@
         "_report_" + reportDate();
       addResultCard(label, base, data.summary, $("resultlist").firstChild, ready.length > 1);
       setStatus(
-        `Done — review, then copy or download. (${data.chars.toLocaleString()} characters read across ` +
+        `Done${prevWell.status === "ready" ? " — compared against last week's report" : ""} — review, then copy or download. (${data.chars.toLocaleString()} characters read across ` +
           `${ready.length} document${ready.length === 1 ? "" : "s"})`,
         "ok"
       );
@@ -899,16 +1016,38 @@
       const files = e.dataTransfer ? e.dataTransfer.files : null;
       if (!files || !files.length) return;
       const t = e.target instanceof Element ? e.target : null;
-      // A drop on a compare well fills that well; a stray drop while the
-      // Compare tab is open fills the first open slot; anything else joins
-      // the summarize queue (including drops on the left pane).
+      // A drop on the step-1 well loads last week's report; a drop on a
+      // compare well fills that well; a stray drop while the Compare tab is
+      // open fills the first open slot; anything else joins the summarize
+      // queue (including drops on the left pane).
       const wellEl = t && t.closest(".well");
+      if (wellEl && wellEl.id === "prev-well") return void setPrevFile(files[0]);
       if (wellEl) return void setWellFile(wellEl.id === "well-prev" ? "prev" : "curr", files[0]);
       if (activeTab === "compare" && !(t && t.closest(".pane-left"))) {
         return void setWellFile(wells.prev.status !== "ready" ? "prev" : "curr", files[0]);
       }
       addFiles(files);
     });
+
+    // Step-1 well: click to choose (buttons inside handle themselves),
+    // drag highlight, picker change, and the first-report checkbox gate.
+    const pwell = $("prev-well");
+    const pinput = $("prev-well-input");
+    pwell.addEventListener("click", (e) => {
+      if (e.target instanceof Element && e.target.closest("button")) return;
+      if (prevWell.status !== "ready") pinput.click();
+    });
+    ["dragenter", "dragover"].forEach((ev) =>
+      pwell.addEventListener(ev, () => pwell.classList.add("is-over"))
+    );
+    ["dragleave", "drop"].forEach((ev) =>
+      pwell.addEventListener(ev, () => pwell.classList.remove("is-over"))
+    );
+    pinput.addEventListener("change", () => {
+      if (pinput.files[0]) setPrevFile(pinput.files[0]);
+      pinput.value = ""; // let the same file be re-picked
+    });
+    $("firstreport").addEventListener("change", updateSummarizeButton);
 
     ["dragenter", "dragover"].forEach((ev) =>
       drop.addEventListener(ev, (e) => {
@@ -986,6 +1125,7 @@
     }
 
     render();
+    renderPrevWell();
     renderWell("prev");
     renderWell("curr");
     updateCompareButton();

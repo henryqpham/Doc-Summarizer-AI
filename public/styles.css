@@ -718,3 +718,57 @@ button:disabled { cursor: not-allowed; }
 }
 .limits-list dd { font-size: 13.5px; color: var(--muted); }
 .limits-list dd strong, .limits-list dd em { color: var(--text); }
+
+/* ---------- Step 1: last week's report (left pane) ---------- */
+
+.prevreport { margin-bottom: 4px; }
+.prevreport .section-label { margin-top: 0; }
+
+/* Same well language as the compare tab, just tighter for the sidebar. */
+.well--compact { min-height: 88px; padding: 12px 14px; }
+
+.firstreport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 2px 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.firstreport input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--indigo);
+  cursor: pointer;
+}
+.firstreport:hover { color: var(--text); }
+
+/* The "pagebreak" between step 1 and step 2. */
+.pane-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 2px 14px;
+  color: var(--faint);
+}
+.pane-divider::before,
+.pane-divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+.pane-divider span {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+/* Why the Summarize button is off — only shown when that's non-obvious. */
+.gate-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--amber-text);
+  text-align: center;
+}

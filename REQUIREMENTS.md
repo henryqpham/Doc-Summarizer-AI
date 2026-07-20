@@ -9,7 +9,7 @@ there and update this file in the same commit.
 | Rule | Limit | When violated | Enforced in |
 |---|---|---|---|
 | Upload size per file | **25 MB** | Rejected client-side before upload; server refuses mid-stream too | `public/app.js` (`MAX_UPLOAD_BYTES`), `server.mjs` via `config.maxUploadBytes` |
-| Total text per request (summary or comparison) | **600,000 characters** (~150k tokens) | Clean error, **nothing is sent or truncated** | `lib/asksage.mjs` (`config.maxInputChars`) |
+| Total text per request (summary or comparison) | **600,000 characters** (~150k tokens), counting last week's report when attached | Clean error, **nothing is sent or truncated** | `lib/asksage.mjs` (`config.maxInputChars`) |
 | JSON body size (`/api/summarize-text`, `/api/compare`) | **5 MB** | Refused before buffering | `server.mjs` (`MAX_JSON_BYTES`) |
 | Minimum extracted text | **20 characters** after stripping Ask Sage's metadata header | "Extraction failed" error — never summarized | `lib/asksage.mjs` (`extractText`) |
 | Minimum text per document to summarize/compare | **30 characters** | "That isn't a document/report" error — never sent to the model | `lib/asksage.mjs` (`summarizeDocuments`, `compareDocuments`) |
@@ -52,8 +52,12 @@ there and update this file in the same commit.
   destination for it. The tool keeps nothing locally, and **Ask Sage retains
   prompt history server-side** like any approved platform. **Classified
   material never goes in** — that boundary belongs to classified systems.
-- Comparison inputs are last week's **exported report file** — the tool
-  deliberately remembers nothing between sessions.
+- Last week's report — whether feeding the summary's trend/status/key-changes
+  columns or the Compare tab — is always the **exported report file** you
+  downloaded then; the tool deliberately remembers nothing between sessions.
+- The **first-report checkbox** is for the genuine first week only. Ticking it
+  when a prior report exists means trends and "key changes" have nothing real
+  to be judged against — load the file instead.
 - Follow your directorate's disclosure policy for AI-assisted work products.
 
 ## 5. Local API (for maintainers)
@@ -61,7 +65,7 @@ there and update this file in the same commit.
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/extract` | file bytes (+ `x-filename` header) → `{text, chars, filename}` |
-| `POST /api/summarize-text` | `{documents: [{filename, text}, …]}` → `{summary, chars}` |
+| `POST /api/summarize-text` | `{documents: [{filename, text}, …], previous: {filename, text}` *(optional — last week's report as reference)*`}` → `{summary, chars}` — `chars` counts `previous` too when present |
 | `POST /api/compare` | `{previous, current}` → `{comparison, chars}` — week-over-week |
 | `POST /api/summarize` | legacy one-shot: file bytes → `{summary, chars}` |
 | `GET /api/health` | `{ok, model, gov}` — no secrets |
@@ -83,8 +87,9 @@ Errors are 4xx with `{error: string}`.
   last, randomized tags) is deliberate — the rationale is in that file's
   header comment. Don't "tidy" it.
 - **Checks:** `npm run probe` (diagnostic, dumps raw API responses) and
-  `npm run e2e` (⚠️ live — sends two harmless built-in fixtures through a
-  running server to the real instance; the final pre-ship check).
+  `npm run e2e` (⚠️ live — sends harmless built-in fixtures — a sample memo,
+  a generated PDF, and a fictional prior-week report — through a running
+  server to the real instance; the final pre-ship check).
 
 ## 7. Deliberately not supported
 

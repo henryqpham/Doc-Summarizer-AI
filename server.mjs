@@ -194,7 +194,21 @@ async function handleSummarizeText(req, res) {
       return { filename, text: doc.text };
     });
 
-    const { summary, chars } = await summarizeDocuments(documents);
+    // Optional: last week's report rides along as reference context so
+    // trend/status/"key changes" judgments come from real prior-week evidence.
+    let previous = null;
+    if (parsed?.previous != null) {
+      if (typeof parsed.previous !== "object" || typeof parsed.previous.text !== "string" || !parsed.previous.text.trim()) {
+        throw new Error('"previous" (last week\'s report) needs a non-empty string "text".');
+      }
+      const pname =
+        typeof parsed.previous.filename === "string" && parsed.previous.filename.trim()
+          ? parsed.previous.filename.trim()
+          : "previous report";
+      previous = { filename: pname, text: parsed.previous.text };
+    }
+
+    const { summary, chars } = await summarizeDocuments(documents, previous);
     sendJson(res, 200, { summary, chars });
   } catch (err) {
     sendJson(res, 400, { error: err.message });

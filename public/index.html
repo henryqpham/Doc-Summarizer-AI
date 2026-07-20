@@ -62,6 +62,9 @@
         <dt>Where do my documents go?</dt>
         <dd>Straight to Ask Sage, NASA's approved AI service — and nowhere else. This tool was built for sensitive work documents (CUI), and Ask Sage is the approved place to process them. Nothing is ever saved on this computer; Ask Sage keeps its own record on the approved side, like any official system. As always, classified material stays in classified systems — never here.</dd>
 
+        <dt>Why does it ask for last week's report?</dt>
+        <dd>So the trends, statuses, and "key changes" in your new report are judged against what you actually reported last week — not guessed. It's the file you downloaded last time. Writing your very first report? Tick the first-report box instead.</dd>
+
         <dt>Before you paste it into an email</dt>
         <dd>Read the summary first, and double-check a few numbers, dates, and names against the original document. If you see <em>"Not stated in document"</em>, the document really didn't say — the tool never fills gaps with guesses. The email is yours; the AI only drafts it.</dd>
       </dl>
@@ -76,12 +79,29 @@
       <!-- ------ Left pane: intake ------ -->
       <section class="pane-left" aria-label="Add documents">
         <div class="pane-left-scroll">
+          <!-- Step 1: last week's report — reference for trends/"key changes".
+               State (empty / extracting / ready / error) rendered by app.js. -->
+          <section class="prevreport" aria-label="Last week's report">
+            <div class="section-label"><span>Step 1 — Last week's report</span></div>
+            <div class="well well--compact" id="prev-well">
+              <div class="well-body" id="prev-well-body"></div>
+              <input id="prev-well-input" type="file" hidden />
+            </div>
+            <label class="firstreport" id="firstreport-row">
+              <input type="checkbox" id="firstreport" />
+              <span>First report — I don't have a previous week</span>
+            </label>
+          </section>
+
+          <div class="pane-divider" aria-hidden="true"><span>then</span></div>
+
+          <div class="section-label"><span>Step 2 — This week's documents</span></div>
           <section
             id="dropzone"
             class="dropzone"
             role="button"
             tabindex="0"
-            aria-label="Drop documents or click to choose files"
+            aria-label="Drop this week's documents or click to choose files"
           >
             <div class="dz-icon" aria-hidden="true">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -90,7 +110,7 @@
                 <path d="m8 16 4-4 4 4"/>
               </svg>
             </div>
-            <h2>Drop PDF, DOCX, or TXT files here</h2>
+            <h2>Drop this week's documents here</h2>
             <p>or <span class="dz-link">click to choose</span></p>
             <input id="filepicker" class="dropzone__input" type="file" multiple hidden />
           </section>
@@ -126,6 +146,8 @@
             <!-- Label text set by app.js (updateSummarizeButton). -->
             <span id="summarize-label">Summarize</span>
           </button>
+          <!-- Shown by app.js only when files are ready but step 1 isn't done. -->
+          <p id="gate-hint" class="gate-hint" hidden>Add last week's report above, or tick "First report".</p>
         </div>
       </section>
 
@@ -176,15 +198,19 @@
               <ol>
                 <li>
                   <span class="step-num" aria-hidden="true">1</span>
-                  <span class="step-text"><strong>Drop</strong> — add PDF, DOCX, or TXT files.</span>
+                  <span class="step-text"><strong>Last week</strong> — add the report you downloaded last week (or tick "First report").</span>
                 </li>
                 <li>
                   <span class="step-num" aria-hidden="true">2</span>
-                  <span class="step-text"><strong>Summarize</strong> — your approved AI reads and condenses them.</span>
+                  <span class="step-text"><strong>Drop</strong> — add this week's PDF, DOCX, or TXT files.</span>
                 </li>
                 <li>
                   <span class="step-num" aria-hidden="true">3</span>
-                  <span class="step-text"><strong>Copy or download</strong> — paste the result straight into an email.</span>
+                  <span class="step-text"><strong>Summarize</strong> — trends and changes are judged against last week.</span>
+                </li>
+                <li>
+                  <span class="step-num" aria-hidden="true">4</span>
+                  <span class="step-text"><strong>Copy or download</strong> — paste the result straight into an email; keep the download for next week.</span>
                 </li>
               </ol>
             </div>

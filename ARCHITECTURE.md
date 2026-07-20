@@ -37,11 +37,19 @@ summarize it, and brings the answer back to your screen.
 3. Ask Sage sends back plain text. The page shows **"9,138 characters read"**
    — a sanity check that reading actually worked. (A tiny number means the
    document couldn't be read, and the app stops instead of guessing.)
-4. When you click **Summarize**, the helper sends Ask Sage the text plus an
-   instruction sheet: *"summarize this into exactly this email format."*
-   The instruction sheet lives in `lib/template.mjs` — change that file and
-   you change the shape of every summary.
-5. The answer comes back and appears as a card you can edit, copy, or
+4. **Last week's report** (the file you downloaded back then) goes through
+   the same read step, from its own box at the top of the panel. It rides
+   along as reference material — so when the new summary says a status
+   improved or lists "key changes since last week," the AI is comparing
+   against what you actually reported, not inventing a memory. On a true
+   first report you tick a box saying there's no previous week, and the AI
+   is told so.
+5. When you click **Summarize**, the helper sends Ask Sage this week's text
+   (plus last week's report as reference) and an instruction sheet:
+   *"summarize this into exactly this email format, judging trends against
+   the previous report."* The instruction sheet lives in `lib/template.mjs`
+   — change that file and you change the shape of every summary.
+6. The answer comes back and appears as a card you can edit, copy, or
    download. **Compare weeks** works the same way, with a different
    instruction sheet: *"here are two weekly reports — list what changed."*
 
