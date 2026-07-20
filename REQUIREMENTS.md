@@ -47,7 +47,9 @@ there and update this file in the same commit.
   names against the source document — fluent output is not verified output.
 - "Not stated in document." in an output means the source didn't contain it.
   Don't fill the blank from memory inside the tool's output — edit the email
-  consciously if you know more.
+  consciously if you know more. (One deliberate exception: the "Week Ending"
+  header may be filled from today's date when the documents don't state the
+  reporting period — a period stated in the documents always wins.)
 - The tool is built for **CUI**; the `-gov` Ask Sage endpoint is the approved
   destination for it. The tool keeps nothing locally, and **Ask Sage retains
   prompt history server-side** like any approved platform. **Classified
