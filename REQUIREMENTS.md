@@ -56,7 +56,37 @@ there and update this file in the same commit.
   deliberately remembers nothing between sessions.
 - Follow your directorate's disclosure policy for AI-assisted work products.
 
-## 5. Deliberately not supported
+## 5. Local API (for maintainers)
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/extract` | file bytes (+ `x-filename` header) → `{text, chars, filename}` |
+| `POST /api/summarize-text` | `{documents: [{filename, text}, …]}` → `{summary, chars}` |
+| `POST /api/compare` | `{previous, current}` → `{comparison, chars}` — week-over-week |
+| `POST /api/summarize` | legacy one-shot: file bytes → `{summary, chars}` |
+| `GET /api/health` | `{ok, model, gov}` — no secrets |
+
+Errors are 4xx with `{error: string}`.
+
+## 6. Traps — read before changing anything
+
+- **Ask Sage response fields are endpoint-specific** (verified live via
+  `npm run probe`): `/server/query` answers in `message`; `/server/file` in
+  `ret`, behind a metadata line that gets stripped. On both, `response` can be
+  the literal status word `"OK"` — never treat it as content. Don't reorder
+  the candidate lists in `lib/asksage.mjs` without re-probing. (This exact
+  trap once shipped a confident summary of the 2-character string "OK".)
+- **`node server.mjs` directly fails** with a bare `fetch failed` — only the
+  npm scripts pass `--use-system-ca` (NASA TLS interception).
+- **`npm run dev` does not reload `.env`** — restart after editing it.
+- The prompt layout in `lib/template.mjs` (documents first, instructions
+  last, randomized tags) is deliberate — the rationale is in that file's
+  header comment. Don't "tidy" it.
+- **Checks:** `npm run probe` (diagnostic, dumps raw API responses) and
+  `npm run e2e` (⚠️ live — sends two harmless built-in fixtures through a
+  running server to the real instance; the final pre-ship check).
+
+## 7. Deliberately not supported
 
 - Hosting for multiple users / LAN access (would publish credentials)
 - Saving documents, summaries, or history on this machine
