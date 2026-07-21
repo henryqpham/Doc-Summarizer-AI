@@ -494,6 +494,17 @@
   }
 
   // ── summarize ─────────────────────────────────────────────────────────
+  // Snapshot of the extracted texts a summary was built from, captured at
+  // request time so the card's "Source check" (verify.js) still works after
+  // files are removed from the queue. Strings only; memory, never disk.
+  function cardSources(items) {
+    const s = items.map((f) => ({ name: f.name, text: f.text }));
+    if (prevWell.status === "ready") {
+      s.push({ name: "Last week's report (" + prevWell.filename + ")", text: prevWell.text });
+    }
+    return s;
+  }
+
   async function requestSummary(docs) {
     const body = {
       documents: docs.map((f) => ({ filename: f.name, text: f.text })),
@@ -547,7 +558,7 @@
       const label =
         ready.length === 1 ? ready[0].name : `Combined summary — ${ready.length} documents`;
       const base = "report_" + reportDate();
-      addResultCard(label, base, data.summary, $("resultlist").firstChild, ready.length > 1);
+      addResultCard(label, base, data.summary, $("resultlist").firstChild, ready.length > 1, cardSources(ready));
       setStatus(
         `Done${prevWell.status === "ready" ? " — compared against last week's report" : ""} — review, then copy or download. (${data.chars.toLocaleString()} characters read across ` +
           `${ready.length} document${ready.length === 1 ? "" : "s"})`,
@@ -571,7 +582,7 @@
       try {
         const data = await requestSummary([item]);
         const base = (sanitizeFilename(item.name) || "document") + "_report_" + reportDate();
-        addResultCard(item.name, base, data.summary, before, false);
+        addResultCard(item.name, base, data.summary, before, false, cardSources([item]));
       } catch (err) {
         failures.push(`${item.name} — ${err.message || err}`);
       }
@@ -650,7 +661,7 @@
   // so manual edits are always included. Cards are built once and never
   // re-rendered, so edits survive later runs; "Clear all" removes the nodes
   // (and their listeners).
-  function addResultCard(label, downloadBase, summaryText, beforeNode, isCombined) {
+  function addResultCard(label, downloadBase, summaryText, beforeNode, isCombined, sources) {
     const card = document.createElement("article");
     card.className = "result-card";
     card.setAttribute("aria-label", "Summary: " + label);
@@ -684,9 +695,15 @@
     const preview = document.createElement("div");
     preview.className = "summary-preview";
     preview.setAttribute("aria-label", "Formatted summary: " + label);
+    // Source check (verify.js): wired to the card's result-body further
+    // below, then refreshed after every preview render so manual edits are
+    // re-checked too. Preview-only — Copy and downloads read the textarea,
+    // so dots and panel never reach the email or the exported files.
+    let verifyUI = null;
     function renderPreview() {
       preview.textContent = ""; // drop the old fragment
       preview.appendChild(window.MD.render(window.MD.parse(textarea.value)));
+      if (verifyUI) verifyUI.refresh();
     }
     renderPreview();
     textarea.hidden = true; // preview first; Edit reveals the raw text
@@ -695,7 +712,9 @@
     let editing = false;
     function setEditing(on) {
       editing = on;
+      if (on && verifyUI) verifyUI.closePanel();
       if (!on) renderPreview(); // returning to preview picks up manual edits
+      if (preview.parentNode) preview.parentNode.classList.toggle("is-editing", on);
       preview.hidden = on;
       textarea.hidden = !on;
       editBtn.textContent = on ? "Preview" : "Edit";
@@ -776,6 +795,10 @@
     const body = document.createElement("div");
     body.className = "result-body";
     body.append(preview, textarea); // exactly one visible at a time
+    if (window.Verify && sources && sources.length) {
+      verifyUI = window.Verify.attach({ preview, container: body, sources });
+      verifyUI.refresh();
+    }
     card.append(bar, body);
     const list = $("resultlist");
     // The anchor may have been detached by "Clear all" mid-run — fall back

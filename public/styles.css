@@ -729,3 +729,126 @@ button:disabled { cursor: not-allowed; }
   color: var(--amber-text);
   text-align: center;
 }
+
+/* ── Source check (verify.js): quiet click-to-source + exception flags ──
+   No scoreboard, no traffic lights: a verified line looks like a normal
+   line. Any line clicks through to its source; only unmatched lines carry
+   a soft "double-check" note. */
+
+.src-line { cursor: pointer; }
+.src-line:hover { background: var(--indigo-tint); border-radius: 3px; }
+
+/* The only marker on the page: a small soft "double-check" note. */
+.src-flag {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  margin-left: 7px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+  background: var(--amber-bg);
+  color: var(--amber-text);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.src-flag:hover { filter: brightness(0.96); }
+
+/* One quiet sentence above the report — never a tally. */
+.src-strip {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 0 2px;
+  font-size: 12px;
+  color: var(--faint);
+}
+.src-strip-note { color: var(--amber-text); font-weight: 600; }
+.src-strip-hint { color: var(--faint); }
+.is-editing .src-strip { display: none; }
+
+/* Clicked line gets a quiet highlight while its panel is open. */
+.src-line.src-active {
+  outline: 2px solid var(--indigo);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+/* The panel opens inline, directly under the clicked line. Wrappers keep
+   the flow valid inside lists (marker-less li) and tables (colspan row). */
+.src-panel-li { list-style: none; margin: 6px 0 8px -24px; }
+.src-panel-cell { padding: 6px !important; }
+
+.source-panel {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--indigo);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 12px 14px;
+  margin: 8px 0 12px;
+  font-size: 13px;
+  max-height: 60vh;
+  overflow: auto;
+}
+.source-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.source-panel-head h4 { font-size: 13.5px; font-weight: 650; }
+.src-quoted {
+  font-style: italic;
+  color: var(--text);
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.src-sentence { margin: 0 0 12px; }
+.src-sentence-text {
+  font-style: italic;
+  color: var(--muted);
+  font-size: 12.5px;
+  margin: 0 0 3px;
+}
+.src-verdict { font-weight: 600; margin: 0 0 6px; }
+.src-verdict-found   { color: var(--muted); }
+.src-verdict-partial { color: var(--muted); }
+.src-verdict-none    { color: var(--amber-text); }
+.src-verdict-note    { color: var(--muted); font-weight: 500; }
+.src-source {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--indigo-text);
+  background: var(--indigo-tint);
+  border-radius: 999px;
+  padding: 2px 9px;
+  margin: 4px 0 2px;
+}
+.src-passage {
+  border-left: 3px solid var(--border-strong);
+  padding: 5px 9px;
+  margin: 4px 0 8px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.src-passage mark {
+  background: var(--amber-bg);
+  color: var(--text);
+  font-weight: 600;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.src-footnote {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--faint);
+}

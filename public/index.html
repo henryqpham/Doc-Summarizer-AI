@@ -65,6 +65,9 @@
         <dt>Why does it ask for last week's report?</dt>
         <dd>So the trends, statuses, and "key changes" in your new report are judged against what you actually reported last week — not guessed. It's the file you downloaded last time. Writing your very first report? Tick the first-report box instead.</dd>
 
+        <dt>Where did a line in the summary come from?</dt>
+        <dd>Click any line — the app shows you the passage in your documents it came from, side by side. If a line couldn't be matched to your documents at all, it gets a small <strong>"double-check"</strong> note: read that one against the original before sending. One honest caveat: a match means the words were <em>found</em>, not that the sentence is guaranteed right — you're still the judge. None of this appears in what you copy or download.</dd>
+
         <dt>Before you paste it into an email</dt>
         <dd>Read the summary first, and double-check a few numbers, dates, and names against the original document. If you see <em>"Not stated in document"</em>, the document really didn't say — the tool never fills gaps with guesses. The email is yours; the AI only drafts it.</dd>
       </dl>
@@ -219,8 +222,11 @@
 
     <script src="pdfgen.js"></script>
     <!-- markdown.js must load before app.js: it defines window.MD, which
-         app.js uses for the formatted previews and rich clipboard copy. -->
+         app.js uses for the formatted previews and rich clipboard copy.
+         verify.js (window.Verify, the per-line source check) must load
+         before app.js too — result cards wire it up at creation time. -->
     <script src="markdown.js"></script>
+    <script src="verify.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

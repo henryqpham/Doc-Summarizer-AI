@@ -41,11 +41,21 @@ running: start it again, then reload the page.
 
 ## Before you hit Send — the 30-second habit
 
+- **Look for "double-check" notes.** The app quietly checks every line
+  against the documents you dropped. Lines that match look completely
+  normal. A line that couldn't be matched gets a small **"double-check"**
+  note — read that one against the original before sending.
+- **Click any line to see where it came from.** The matching passage from
+  your documents opens right under it, side by side.
 - **Read the summary.** You're the author of the email; the AI only drafts.
+  A match means the words were *found* — it can't tell whether the
+  sentence uses them correctly, so the read-through is still yours.
 - **Double-check two or three numbers, dates, and names** against the
   original document.
 - If it says **"Not stated in document"**, the document really didn't say —
   the tool never fills gaps with guesses.
+- The notes and click-to-source view are only on your screen — they never
+  appear in what you copy into the email or download.
 
 ## If something looks wrong
 
