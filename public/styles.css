@@ -414,7 +414,7 @@ button:disabled { cursor: not-allowed; }
 .results-header {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
-.results-header h1 { font-size: 19px; font-weight: 700; letter-spacing: -0.015em; }
+.results-header h2 { font-size: 19px; font-weight: 700; letter-spacing: -0.015em; }
 
 /* Slim tinted status line (busy / ok / error), icon prepended by app.js. */
 .statusline {
@@ -599,27 +599,10 @@ button:disabled { cursor: not-allowed; }
   .model-chip { padding-left: 6px; }
 }
 
-/* ---------- Tabs (right pane) ---------- */
+/* The results panel keeps the pane's column layout so empty states center. */
+.results-panel { flex: 1; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 
-.tabs { display: inline-flex; gap: 4px; }
-.tab {
-  padding: 7px 14px;
-  border-radius: 10px;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--muted);
-  background: transparent;
-  transition: background .12s ease, color .12s ease;
-}
-.tab:hover { background: var(--misc-tint-bg); color: var(--text); }
-.tab.is-active { background: var(--indigo-tint); color: var(--indigo-text); }
-
-/* Each tab's panel keeps the pane's column layout so empty states center. */
-.tabpanel { flex: 1; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
-
-/* ---------- Compare weeks ---------- */
-
-.compare-wells { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+/* ---------- Report well (Step 1, left pane) ---------- */
 
 .well {
   border: 2px dashed var(--border-strong);
@@ -638,13 +621,6 @@ button:disabled { cursor: not-allowed; }
 .well.is-ready { border-style: solid; border-width: 1px; box-shadow: var(--shadow-sm); cursor: default; }
 .well.is-error { border-color: var(--red-text); }
 
-.well-head {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
 .well-body {
   flex: 1;
   display: flex;
@@ -668,25 +644,6 @@ button:disabled { cursor: not-allowed; }
   background: none;
 }
 .link-btn:hover { text-decoration: underline; }
-
-/* One-click "Use latest summary" chip in the This-week well. */
-.well-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  background: var(--indigo-tint);
-  color: var(--indigo-text);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 12.5px;
-  font-weight: 600;
-  transition: background .12s ease;
-}
-.well-chip:hover { background: var(--doc-tint-bg); }
-
-@media (max-width: 700px) {
-  .compare-wells { grid-template-columns: 1fr; }
-}
 
 /* ---------- Limits dialog ---------- */
 
@@ -724,7 +681,7 @@ button:disabled { cursor: not-allowed; }
 .prevreport { margin-bottom: 4px; }
 .prevreport .section-label { margin-top: 0; }
 
-/* Same well language as the compare tab, just tighter for the sidebar. */
+/* Tighter version of the well for the sidebar. */
 .well--compact { min-height: 88px; padding: 12px 14px; }
 
 .firstreport {

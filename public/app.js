@@ -115,9 +115,11 @@
   const queue = [];
   let summarizing = false;
   let extractingNow = false; // one /api/extract in flight at a time
-  let activeTab = "summaries"; // "summaries" | "compare"
 
-  // Download names follow the weekly-report convention: name_report_7_20_2026.pdf
+  // Download names carry TODAY'S date (the day the file was saved):
+  // report_7_21_2026.pdf. This is deliberately different from the date
+  // INSIDE the report — the server injects the reporting week's Friday
+  // (lib/template.mjs dateRule) for the "Notes for the week ending …" line.
   function reportDate() {
     const d = new Date();
     return `${d.getMonth() + 1}_${d.getDate()}_${d.getFullYear()}`;
@@ -544,9 +546,7 @@
       const data = await requestSummary(ready);
       const label =
         ready.length === 1 ? ready[0].name : `Combined summary — ${ready.length} documents`;
-      const base =
-        (ready.length === 1 ? sanitizeFilename(ready[0].name) || "document" : "combined") +
-        "_report_" + reportDate();
+      const base = "report_" + reportDate();
       addResultCard(label, base, data.summary, $("resultlist").firstChild, ready.length > 1);
       setStatus(
         `Done${prevWell.status === "ready" ? " — compared against last week's report" : ""} — review, then copy or download. (${data.chars.toLocaleString()} characters read across ` +
@@ -650,7 +650,7 @@
   // so manual edits are always included. Cards are built once and never
   // re-rendered, so edits survive later runs; "Clear all" removes the nodes
   // (and their listeners).
-  function addResultCard(label, downloadBase, summaryText, beforeNode, isCombined, listEl) {
+  function addResultCard(label, downloadBase, summaryText, beforeNode, isCombined) {
     const card = document.createElement("article");
     card.className = "result-card";
     card.setAttribute("aria-label", "Summary: " + label);
@@ -777,227 +777,13 @@
     body.className = "result-body";
     body.append(preview, textarea); // exactly one visible at a time
     card.append(bar, body);
-    const list = listEl || $("resultlist");
+    const list = $("resultlist");
     // The anchor may have been detached by "Clear all" mid-run — fall back
     // to appending rather than throwing.
     const anchor = beforeNode && beforeNode.parentNode === list ? beforeNode : null;
     list.insertBefore(card, anchor);
-    if (list.id === "comparelist") {
-      $("compare-empty").hidden = true;
-    } else {
-      $("results").hidden = false;
-      $("emptystate").hidden = true; // onboarding yields to the first real result
-      renderCurrWellChip(); // the This-week well can now offer "Use latest summary"
-    }
-  }
-
-  // ── week-over-week comparison ─────────────────────────────────────────
-  // Nothing persists between sessions (deliberately — see the privacy notes),
-  // so "last week" arrives as the exported report file. "This week" is a file
-  // too, or one click on the summary just produced in this session.
-  const wells = {
-    prev: { status: "empty", filename: "", text: "", chars: 0, error: "" },
-    curr: { status: "empty", filename: "", text: "", chars: 0, error: "" },
-  };
-  let comparing = false;
-
-  function latestSummaryCard() {
-    return $("resultlist").querySelector(".summary-box");
-  }
-
-  // The This-week well offers "Use latest summary" only while it's empty AND
-  // a summary card exists — never clobbers a file the user already chose.
-  function renderCurrWellChip() {
-    if (wells.curr.status === "empty") renderWell("curr");
-  }
-
-  function wellIds(key) {
-    return key === "prev"
-      ? { well: "well-prev", body: "well-prev-body", input: "well-prev-input" }
-      : { well: "well-curr", body: "well-curr-body", input: "well-curr-input" };
-  }
-
-  function renderWell(key) {
-    const ids = wellIds(key);
-    const well = $(ids.well);
-    const body = $(ids.body);
-    const st = wells[key];
-    well.classList.toggle("is-ready", st.status === "ready");
-    well.classList.toggle("is-error", st.status === "error");
-    body.textContent = ""; // rebuild; textContent everywhere — never innerHTML
-
-    if (st.status === "extracting") {
-      const line = document.createElement("span");
-      line.append(spinnerEl(), document.createTextNode(" Extracting…"));
-      body.appendChild(line);
-      return;
-    }
-
-    if (st.status === "ready") {
-      const row = document.createElement("div");
-      row.className = "well-file";
-      const type = fileTypeClass(st.filename);
-      const ftype = document.createElement("div");
-      ftype.className = "ftype ftype-" + type;
-      ftype.appendChild(svgIcon(type === "doc" ? ICON_DOC : ICON_FILE));
-      const main = document.createElement("div");
-      main.className = "file-main";
-      const name = document.createElement("div");
-      name.className = "file-name";
-      name.textContent = st.filename;
-      const meta = document.createElement("div");
-      meta.className = "file-meta";
-      meta.appendChild(statusPill("green", `${st.chars.toLocaleString()} characters read`, { withCheck: true }));
-      main.append(name, meta);
-      const actions = document.createElement("div");
-      actions.className = "well-actions";
-      actions.appendChild(
-        smallButton("Remove", () => {
-          wells[key] = { status: "empty", filename: "", text: "", chars: 0, error: "" };
-          renderWell(key);
-          updateCompareButton();
-        })
-      );
-      row.append(ftype, main, actions);
-      body.appendChild(row);
-      return;
-    }
-
-    if (st.status === "error") {
-      body.appendChild(statusPill("red", st.error));
-    } else {
-      const hint = document.createElement("span");
-      hint.textContent = "Drop the exported report here, or";
-      body.appendChild(hint);
-    }
-    body.appendChild(
-      smallButton(st.status === "error" ? "choose another file" : "choose a file", (e) => {
-        e.stopPropagation();
-        $(ids.input).click();
-      }, "link-btn")
-    );
-    if (key === "curr" && latestSummaryCard()) {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "well-chip";
-      chip.append(svgIcon(ICON_COMBINED, 13), document.createTextNode("Use latest summary"));
-      chip.addEventListener("click", (e) => {
-        e.stopPropagation();
-        useLatestSummary();
-      });
-      body.appendChild(chip);
-    }
-  }
-
-  function useLatestSummary() {
-    const box = latestSummaryCard();
-    if (!box) return;
-    const card = box.closest(".result-card");
-    const title = card && card.querySelector("h3");
-    wells.curr = {
-      status: "ready",
-      filename: (title && title.textContent) || "Current summary",
-      text: box.value, // the CURRENT text, edits included
-      chars: box.value.length,
-      error: "",
-    };
-    renderWell("curr");
-    updateCompareButton();
-  }
-
-  async function setWellFile(key, file) {
-    if (!file || comparing) return;
-    const name = file.name || "document";
-    if (file.size === 0) {
-      wells[key] = { status: "error", filename: name, text: "", chars: 0, error: "Empty file — nothing to read." };
-    } else if (file.size > MAX_UPLOAD_BYTES) {
-      wells[key] = { status: "error", filename: name, text: "", chars: 0, error: "Over the 25 MB limit — try a smaller file." };
-    } else {
-      wells[key] = { status: "extracting", filename: name, text: "", chars: 0, error: "" };
-      renderWell(key);
-      updateCompareButton();
-      try {
-        const res = await fetchWithTimeout(
-          "/api/extract",
-          {
-            method: "POST",
-            headers: {
-              "content-type": "application/octet-stream",
-              "x-filename": encodeURIComponent(name),
-            },
-            body: file,
-          },
-          LONG_TIMEOUT_MS,
-          TIMEOUT_MESSAGE
-        );
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-        wells[key] = { status: "ready", filename: name, text: data.text, chars: data.chars, error: "" };
-      } catch (err) {
-        wells[key] = { status: "error", filename: name, text: "", chars: 0, error: err.message || String(err) };
-      }
-    }
-    renderWell(key);
-    updateCompareButton();
-  }
-
-  function updateCompareButton() {
-    const both = wells.prev.status === "ready" && wells.curr.status === "ready";
-    $("compare-btn").disabled = comparing || !both;
-    $("compare-label").textContent = comparing ? "Comparing…" : "Compare weeks";
-  }
-
-  async function compareWeeks() {
-    if (comparing || wells.prev.status !== "ready" || wells.curr.status !== "ready") return;
-    comparing = true;
-    updateCompareButton();
-    setStatus("Comparing last week's report to this week's… this can take a moment.", "busy");
-    try {
-      const res = await fetchWithTimeout(
-        "/api/compare",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            previous: { filename: wells.prev.filename, text: wells.prev.text },
-            current: { filename: wells.curr.filename, text: wells.curr.text },
-          }),
-        },
-        LONG_TIMEOUT_MS,
-        TIMEOUT_MESSAGE
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-      addResultCard(
-        "Week-over-week review",
-        "week_comparison_" + reportDate(),
-        data.comparison,
-        $("comparelist").firstChild,
-        true,
-        $("comparelist")
-      );
-      setStatus(
-        `Comparison ready — review, then copy or download. (${data.chars.toLocaleString()} characters compared)`,
-        "ok"
-      );
-    } catch (err) {
-      setStatus(err.message || String(err), "error");
-    } finally {
-      comparing = false;
-      updateCompareButton();
-    }
-  }
-
-  // ── tabs ──────────────────────────────────────────────────────────────
-  function switchTab(tab) {
-    activeTab = tab;
-    const isSum = tab === "summaries";
-    $("panel-summaries").hidden = !isSum;
-    $("panel-compare").hidden = isSum;
-    $("tab-summaries").classList.toggle("is-active", isSum);
-    $("tab-compare").classList.toggle("is-active", !isSum);
-    $("tab-summaries").setAttribute("aria-selected", String(isSum));
-    $("tab-compare").setAttribute("aria-selected", String(!isSum));
+    $("results").hidden = false;
+    $("emptystate").hidden = true; // onboarding yields to the first real result
   }
 
   // ── wiring ────────────────────────────────────────────────────────────
@@ -1016,16 +802,10 @@
       const files = e.dataTransfer ? e.dataTransfer.files : null;
       if (!files || !files.length) return;
       const t = e.target instanceof Element ? e.target : null;
-      // A drop on the step-1 well loads last week's report; a drop on a
-      // compare well fills that well; a stray drop while the Compare tab is
-      // open fills the first open slot; anything else joins the summarize
-      // queue (including drops on the left pane).
+      // A drop on the step-1 well loads last week's report; anything else
+      // joins the summarize queue (including drops on the left pane).
       const wellEl = t && t.closest(".well");
       if (wellEl && wellEl.id === "prev-well") return void setPrevFile(files[0]);
-      if (wellEl) return void setWellFile(wellEl.id === "well-prev" ? "prev" : "curr", files[0]);
-      if (activeTab === "compare" && !(t && t.closest(".pane-left"))) {
-        return void setWellFile(wells.prev.status !== "ready" ? "prev" : "curr", files[0]);
-      }
       addFiles(files);
     });
 
@@ -1076,23 +856,13 @@
       r.addEventListener("change", updateSummarizeButton)
     );
 
-    // Clear all clears whichever view is open.
+    // Clear all empties the results view.
     $("clear").addEventListener("click", () => {
-      if (activeTab === "compare") {
-        $("comparelist").textContent = ""; // drops every card and its listeners
-        $("compare-empty").hidden = false;
-      } else {
-        $("resultlist").textContent = "";
-        $("results").hidden = true;
-        $("emptystate").hidden = false; // back to the onboarding guide
-        renderCurrWellChip(); // no summaries left → the chip disappears
-      }
+      $("resultlist").textContent = ""; // drops every card and its listeners
+      $("results").hidden = true;
+      $("emptystate").hidden = false; // back to the onboarding guide
       setStatus("");
     });
-
-    $("tab-summaries").addEventListener("click", () => switchTab("summaries"));
-    $("tab-compare").addEventListener("click", () => switchTab("compare"));
-    $("compare-btn").addEventListener("click", compareWeeks);
 
     // Limits dialog: native <dialog> gives Esc + focus handling for free;
     // clicking the backdrop (the dialog element itself) also closes it.
@@ -1102,33 +872,8 @@
       if (e.target === $("limits-dialog")) $("limits-dialog").close();
     });
 
-    for (const key of ["prev", "curr"]) {
-      const ids = wellIds(key);
-      const well = $(ids.well);
-      const input = $(ids.input);
-      // Clicking anywhere on an unfilled well opens the picker; buttons
-      // inside (Remove, chip, link) handle themselves.
-      well.addEventListener("click", (e) => {
-        if (e.target instanceof Element && e.target.closest("button")) return;
-        if (wells[key].status !== "ready") input.click();
-      });
-      ["dragenter", "dragover"].forEach((ev) =>
-        well.addEventListener(ev, () => well.classList.add("is-over"))
-      );
-      ["dragleave", "drop"].forEach((ev) =>
-        well.addEventListener(ev, () => well.classList.remove("is-over"))
-      );
-      input.addEventListener("change", () => {
-        if (input.files[0]) setWellFile(key, input.files[0]);
-        input.value = ""; // let the same file be re-picked
-      });
-    }
-
     render();
     renderPrevWell();
-    renderWell("prev");
-    renderWell("curr");
-    updateCompareButton();
     checkHealth();
   }
 

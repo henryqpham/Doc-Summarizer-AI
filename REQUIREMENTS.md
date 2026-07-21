@@ -9,10 +9,10 @@ there and update this file in the same commit.
 | Rule | Limit | When violated | Enforced in |
 |---|---|---|---|
 | Upload size per file | **25 MB** | Rejected client-side before upload; server refuses mid-stream too | `public/app.js` (`MAX_UPLOAD_BYTES`), `server.mjs` via `config.maxUploadBytes` |
-| Total text per request (summary or comparison) | **600,000 characters** (~150k tokens), counting last week's report when attached | Clean error, **nothing is sent or truncated** | `lib/asksage.mjs` (`config.maxInputChars`) |
-| JSON body size (`/api/summarize-text`, `/api/compare`) | **5 MB** | Refused before buffering | `server.mjs` (`MAX_JSON_BYTES`) |
+| Total text per request (summary) | **600,000 characters** (~150k tokens), counting last week's report when attached | Clean error, **nothing is sent or truncated** | `lib/asksage.mjs` (`config.maxInputChars`) |
+| JSON body size (`/api/summarize-text`) | **5 MB** | Refused before buffering | `server.mjs` (`MAX_JSON_BYTES`) |
 | Minimum extracted text | **20 characters** after stripping Ask Sage's metadata header | "Extraction failed" error — never summarized | `lib/asksage.mjs` (`extractText`) |
-| Minimum text per document to summarize/compare | **30 characters** | "That isn't a document/report" error — never sent to the model | `lib/asksage.mjs` (`summarizeDocuments`, `compareDocuments`) |
+| Minimum text per document to summarize | **30 characters** | "That isn't a document/report" error — never sent to the model | `lib/asksage.mjs` (`summarizeDocuments`) |
 | Empty file | 0 bytes | Rejected client-side, never uploaded | `public/app.js` pre-flight |
 | Request time | **5 min** server→Ask Sage, **6 min** browser→server, 5 s health check | Friendly timeout error; try smaller input | `lib/asksage.mjs` (`AbortSignal.timeout`), `public/app.js` (`fetchWithTimeout`) |
 | Concurrency | **One** extraction and one summarization in flight at a time | Later files wait in a visible queue | `public/app.js` (sequential pump) |
@@ -47,16 +47,18 @@ there and update this file in the same commit.
   names against the source document — fluent output is not verified output.
 - "Not stated in document." in an output means the source didn't contain it.
   Don't fill the blank from memory inside the tool's output — edit the email
-  consciously if you know more. (One deliberate exception: the "Week Ending"
-  header may be filled from today's date when the documents don't state the
-  reporting period — a period stated in the documents always wins.)
+  consciously if you know more. (One deliberate exception: the week-ending
+  date in the report's opening line may be filled with the week-ending
+  **Friday** computed from today's date when the documents don't state the
+  reporting period — a period stated in the documents always wins. Download
+  filenames carry the save date, not the week-ending Friday.)
 - The tool is built for **CUI**; the `-gov` Ask Sage endpoint is the approved
   destination for it. The tool keeps nothing locally, and **Ask Sage retains
   prompt history server-side** like any approved platform. **Classified
   material never goes in** — that boundary belongs to classified systems.
-- Last week's report — whether feeding the summary's trend/status/key-changes
-  columns or the Compare tab — is always the **exported report file** you
-  downloaded then; the tool deliberately remembers nothing between sessions.
+- Last week's report — feeding the summary's trend/status/key-changes
+  columns — is always the **exported report file** you downloaded then; the
+  tool deliberately remembers nothing between sessions.
 - The **first-report checkbox** is for the genuine first week only. Ticking it
   when a prior report exists means trends and "key changes" have nothing real
   to be judged against — load the file instead.
@@ -68,7 +70,6 @@ there and update this file in the same commit.
 |---|---|
 | `POST /api/extract` | file bytes (+ `x-filename` header) → `{text, chars, filename}` |
 | `POST /api/summarize-text` | `{documents: [{filename, text}, …], previous: {filename, text}` *(optional — last week's report as reference)*`}` → `{summary, chars}` — `chars` counts `previous` too when present |
-| `POST /api/compare` | `{previous, current}` → `{comparison, chars}` — week-over-week |
 | `POST /api/summarize` | legacy one-shot: file bytes → `{summary, chars}` |
 | `GET /api/health` | `{ok, model, gov}` — no secrets |
 

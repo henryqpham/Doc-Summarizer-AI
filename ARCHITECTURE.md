@@ -47,11 +47,11 @@ summarize it, and brings the answer back to your screen.
 5. When you click **Summarize**, the helper sends Ask Sage this week's text
    (plus last week's report as reference) and an instruction sheet:
    *"summarize this into exactly this email format, judging trends against
-   the previous report."* The instruction sheet lives in `lib/template.mjs`
-   — change that file and you change the shape of every summary.
+   the previous report."* The report's structure lives in
+   `lib/instructions.txt` — change that file and you change the shape of
+   every summary (the surrounding rules live in `lib/template.mjs`).
 6. The answer comes back and appears as a card you can edit, copy, or
-   download. **Compare weeks** works the same way, with a different
-   instruction sheet: *"here are two weekly reports — list what changed."*
+   download.
 
 ## Why the middleman exists
 

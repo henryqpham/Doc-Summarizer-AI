@@ -2,8 +2,8 @@
 
 Drop documents into a web page and get an email-ready summary back, written
 by NASA's approved Ask Sage AI. Runs on your own computer — nothing is saved,
-and documents go nowhere except Ask Sage. Also compares this week's report to
-last week's.
+and documents go nowhere except Ask Sage. Trends and key changes are judged
+against last week's report.
 
 ## Getting started
 

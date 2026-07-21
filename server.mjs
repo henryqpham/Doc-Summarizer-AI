@@ -28,7 +28,7 @@ try {
 
 // Dynamic import: asksage.mjs reads process.env at module scope, so it must load
 // AFTER loadEnv() above. A static import would hoist and read empty values.
-const { config, assertConfig, extractText, summarizeDocuments, compareDocuments, summarizeFile, listModels } =
+const { config, assertConfig, extractText, summarizeDocuments, summarizeFile, listModels } =
   await import("./lib/asksage.mjs");
 
 try {
@@ -215,34 +215,6 @@ async function handleSummarizeText(req, res) {
   }
 }
 
-/** POST /api/compare — last week's report text vs this week's, comparison out. */
-async function handleCompare(req, res) {
-  try {
-    const body = await readBody(req, MAX_JSON_BYTES);
-    let parsed;
-    try {
-      parsed = JSON.parse(body.toString("utf8"));
-    } catch {
-      throw new Error("The request body must be JSON.");
-    }
-    const shape = (doc, label) => {
-      if (typeof doc?.text !== "string" || !doc.text.trim()) {
-        throw new Error(`"${label}" needs a non-empty string "text".`);
-      }
-      const filename =
-        typeof doc.filename === "string" && doc.filename.trim() ? doc.filename.trim() : "document";
-      return { filename, text: doc.text };
-    };
-    const previous = shape(parsed?.previous, "previous");
-    const current = shape(parsed?.current, "current");
-
-    const { comparison, chars } = await compareDocuments(previous, current);
-    sendJson(res, 200, { comparison, chars });
-  } catch (err) {
-    sendJson(res, 400, { error: err.message });
-  }
-}
-
 /** POST /api/summarize — legacy one-shot: file bytes in, summary out. */
 async function handleSummarize(req, res) {
   try {
@@ -264,7 +236,6 @@ const server = createServer((req, res) => {
   const path = req.url.split("?")[0];
   if (req.method === "POST" && path === "/api/extract") return handleExtract(req, res);
   if (req.method === "POST" && path === "/api/summarize-text") return handleSummarizeText(req, res);
-  if (req.method === "POST" && path === "/api/compare") return handleCompare(req, res);
   if (req.method === "POST" && path === "/api/summarize") return handleSummarize(req, res);
   if (req.method === "GET" && path === "/api/health") return handleHealth(req, res);
   if (req.method === "GET") return serveStatic(req, res);

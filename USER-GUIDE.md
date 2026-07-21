@@ -35,20 +35,9 @@ running: start it again, then reload the page.
    separately** — then click **Summarize**.
 5. The summary appears on the right. **You can edit it right there.**
 6. **Copy** it into your email, or download it as a Word file, PDF, or
-   plain text. Downloads are named with today's date, like
-   `combined_report_7_20_2026.pdf` — keep them; next week starts by adding
+   plain text. Downloads are named with the day you saved them, like
+   `report_7_21_2026.pdf` — keep them; next week starts by adding
    this file as "last week's report."
-
-## Comparing two finished reports
-
-The **Compare weeks** tab (top right) is for reviewing two finished reports
-side by side — separate from making a summary.
-
-- Left box: add **last week's report** (the file you downloaded back then).
-- Right box: add this week's — or just click **"Use latest summary"** if you
-  made one a moment ago.
-- Click **Compare weeks**. You'll get: what's new, what changed, what
-  finished, and what's still open.
 
 ## Before you hit Send — the 30-second habit
 
