@@ -47,6 +47,12 @@ running: start it again, then reload the page.
   note — read that one against the original before sending.
 - **Click any line to see where it came from.** The matching passage from
   your documents opens right under it, side by side.
+- **Check "what may have been left out."** The quiet panel under the summary
+  lists facts from your documents — the ones with numbers, dates, or words
+  like "delay" or "decision" — that don't appear in the report, grouped by
+  document. You skim a short list instead of re-reading every page. Some may
+  be in the report in different words; open one to check. An empty list is a
+  good sign.
 - **Read the summary.** You're the author of the email; the AI only drafts.
   A match means the words were *found* — it can't tell whether the
   sentence uses them correctly, so the read-through is still yours.
@@ -56,6 +62,22 @@ running: start it again, then reload the page.
   the tool never fills gaps with guesses.
 - The notes and click-to-source view are only on your screen — they never
   appear in what you copy into the email or download.
+
+## How the tool checks itself (for the record)
+
+You don't need this to use the tool, but it's here if anyone ever asks how
+the report is put together:
+
+- For a combined report, the tool writes it a few times over (giving the
+  documents in a different order each time) and automatically keeps the
+  version that is **best supported by your documents and covers the most of
+  them** — checked line by line against the sources, not by the tool judging
+  its own confidence. That's why a combined report takes a few minutes.
+- The version you see is always at least as good as a single pass would
+  have produced; the check can only improve the result, never worsen it.
+- It still can't guarantee every sentence is correct — that's why you read
+  it and check the "double-check" notes before sending. The tool finds and
+  grounds; you decide.
 
 ## If something looks wrong
 

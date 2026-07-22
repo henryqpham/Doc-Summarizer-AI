@@ -6,6 +6,9 @@
 # the real output template (may be sensitive) — same pattern as .env:
 # the tracked lib/instructions.example.txt is the placeholder fallback
 lib/instructions.txt
+# backups and rework candidates of the sensitive template — never commit
+lib/instructions.backup*.txt
+lib/instructions.reworked.txt
 
 # dependencies (there are none, but just in case)
 node_modules/

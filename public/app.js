@@ -500,7 +500,9 @@
   function cardSources(items) {
     const s = items.map((f) => ({ name: f.name, text: f.text }));
     if (prevWell.status === "ready") {
-      s.push({ name: "Last week's report (" + prevWell.filename + ")", text: prevWell.text });
+      // prior:true — usable for "where did this come from", but reference
+      // material, so verify.js never flags it as content the report "left out".
+      s.push({ name: "Last week's report (" + prevWell.filename + ")", text: prevWell.text, prior: true });
     }
     return s;
   }
@@ -529,6 +531,52 @@
     return data;
   }
 
+  // Best-of-N: the gateway is nondeterministic, so the same inputs yield
+  // different reports run-to-run. Rather than ship whichever run happened,
+  // generate a few candidates and keep the best MEASURED one — most grounded,
+  // then most complete, then tightest (verify.js selectBest). Diversity comes
+  // from DOCUMENT ORDER only (candidate 1 = canonical order, others rotated):
+  // temperature stays 0.0, so the calibrated template is never perturbed and
+  // no server/template change is needed. Candidate 1 is the canonical floor,
+  // so the result can never be worse than a single-shot run. Sequential
+  // (matches the app's one-at-a-time design); a failed candidate just shrinks
+  // the pool. Invisible to the reviewer by design — see USER-GUIDE.
+  const BEST_OF = 3;
+  function rotate(arr, n) {
+    const k = arr.length ? n % arr.length : 0;
+    return k ? arr.slice(k).concat(arr.slice(0, k)) : arr.slice();
+  }
+  async function requestBestSummary(docs, onProgress) {
+    // Reordering only diversifies with 2+ documents; below that, one pass.
+    const n = docs.length >= 2 ? BEST_OF : 1;
+    const summaries = [];
+    let chars = 0;
+    let lastErr = null;
+    for (let i = 0; i < n; i++) {
+      if (onProgress) onProgress(i, n);
+      try {
+        const data = await requestSummary(rotate(docs, i));
+        summaries.push(data.summary);
+        if (!chars) chars = data.chars;
+      } catch (err) {
+        lastErr = err; // accumulate successes; a failed candidate shrinks the pool
+      }
+    }
+    if (!summaries.length) throw lastErr || new Error("Couldn't build the report — please try again.");
+    // Without the scorer we can't rank — ship the canonical (first) candidate.
+    if (summaries.length === 1 || !window.Verify) return { summary: summaries[0], chars };
+    const pick = window.Verify.selectBest(summaries, cardSources(docs));
+    // Quiet audit trail (dev console): which candidate won and why. Keeps the
+    // deterministic gate-then-rank decision inspectable without touching the UI.
+    try {
+      console.info(
+        `[source-check] best of ${summaries.length}: chose #${pick.index + 1}`,
+        pick.all.map((c) => ({ unverified: c.ungrounded, possiblyMissing: c.omissions, length: c.length }))
+      );
+    } catch (_) {}
+    return { summary: pick.summary, chars };
+  }
+
   async function summarize() {
     const ready = queue.filter((f) => f.status === "ready");
     if (!ready.length || summarizing || !priorGateOpen()) return;
@@ -545,16 +593,23 @@
     }
   }
 
-  // All ready documents -> ONE combined summary -> one card.
+  // All ready documents -> ONE combined summary -> one card. Runs best-of-N
+  // (requestBestSummary): the multi-pass work is framed as verification, not
+  // as "drafts", and the step counter keeps a multi-minute wait from looking
+  // frozen. The reviewer never sees "version N" language.
   async function summarizeCombined(ready) {
-    setStatus(
-      ready.length === 1
-        ? `Summarizing "${ready[0].name}"… this can take a moment.`
-        : `Summarizing ${ready.length} documents into one combined summary… this can take a moment.`,
-      "busy"
-    );
+    const only = ready.length === 1;
     try {
-      const data = await requestSummary(ready);
+      const data = await requestBestSummary(ready, (i, n) => {
+        setStatus(
+          n > 1
+            ? `Preparing your report and checking it against your documents… this can take a few minutes. (step ${i + 1} of ${n})`
+            : only
+              ? `Summarizing "${ready[0].name}"… this can take a moment.`
+              : `Summarizing ${ready.length} documents into one combined summary… this can take a moment.`,
+          "busy"
+        );
+      });
       const label =
         ready.length === 1 ? ready[0].name : `Combined summary — ${ready.length} documents`;
       const base = "report_" + reportDate();

@@ -41,6 +41,35 @@
     const NUMBER_WEIGHT = 3; // numbers/dates survive paraphrase best
     const CAPITALIZED_WEIGHT = 2; // names/acronyms (proper-noun proxy)
 
+    // ── "what was left out" tunables (reverse direction) ──
+    // Deliberately QUIET to start (user decision): a source sentence is only
+    // surfaced as possibly-left-out when it carries a NUMBER/date or a
+    // risk/change CUE word AND the report doesn't represent it. Precision
+    // over recall — a short trustworthy list beats a noisy complete one,
+    // because a leftovers list that cries wolf gets ignored wholesale.
+    const LEFTOUT_COVERAGE_MAX = PARTIAL_MIN; // at/above this = represented enough
+    const LEFTOUT_MAX_PER_DOC = 4;
+    const LEFTOUT_MAX_TOTAL = 10;
+    const LEFTOUT_SIM_MAX = 0.6; // drop a candidate this similar to a shown one
+
+    // Risk / change / decision words that mark a status line as report-worthy
+    // (Edmundson "cue" method). Scanned on raw text, so stopword cues like
+    // "completed" still count. Kept tight — "issue(s)" excluded, it fires on
+    // nearly every status sentence and would flood the list.
+    const CUE_WORDS = new Set([
+      "risk", "risks", "fail", "failed", "failure", "fails", "slip", "slipped",
+      "slipping", "delay", "delayed", "delays", "blocked", "blocker", "blockers",
+      "blocking", "concern", "concerns", "critical", "escalate", "escalated",
+      "escalation", "overrun", "behind", "stopped", "halt", "halted", "missed",
+      "cancelled", "canceled", "deferred", "waived", "waiver", "breach",
+      "exceeded", "exceeds", "decision", "decisions", "decided", "approved",
+      "approval", "milestone", "milestones", "first", "anomaly", "shortfall",
+      "descope", "descoped", "unresolved", "noncompliant", "nonconformance",
+    ]);
+    // If one of these precedes a cue within 2 words, the cue is negated
+    // ("no delay", "risk avoided") and doesn't count.
+    const NEGATORS = new Set(["no", "not", "without", "avoided", "avoid", "resolved", "zero", "never"]);
+
     // Common words that match everywhere and prove nothing.
     const STOPWORDS = new Set([
       "the", "and", "for", "are", "was", "were", "not", "but", "its", "his",
@@ -271,6 +300,153 @@
       return { verdict: worst, sentences };
     }
 
+    // ── "what was left out": the SAME matcher, run in reverse ─────────────
+    // Forward asks "is this report line in the documents?"; reverse asks "is
+    // this document sentence in the report?". A salient source sentence with
+    // no representation in the report is a possible omission.
+    function hasCueWord(sentence) {
+      const words = sentence.toLowerCase().match(/[a-z]+/g) || [];
+      for (let i = 0; i < words.length; i++) {
+        if (!CUE_WORDS.has(words[i])) continue;
+        if (NEGATORS.has(words[i - 1]) || NEGATORS.has(words[i - 2])) continue;
+        return true;
+      }
+      return false;
+    }
+
+    // Email routing metadata: To/Cc/From/Sent header lines, address lists,
+    // reply banners. The inputs are often Outlook exports, and this boilerplate
+    // carries names/dates that trip the salience gate but is never report
+    // content — flagging it as "left out" is pure noise. Skipped, not scored.
+    const HEADER_LABEL = /^\s*(sent|from|to|cc|bcc|subject|date|importance|sensitivity|attachments?|reply-to|received|classification)\s*:/i;
+    const EMAIL_ADDR = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+    const REPLY_BANNER = /^\s*on\s.+\swrote\s*:/i;
+    function isBoilerplate(sentence) {
+      return EMAIL_ADDR.test(sentence) || HEADER_LABEL.test(sentence) || REPLY_BANNER.test(sentence);
+    }
+
+    function jaccard(a, b) {
+      if (!a.size || !b.size) return 0;
+      let inter = 0;
+      const small = a.size < b.size ? a : b;
+      const big = small === a ? b : a;
+      for (const k of small) if (big.has(k)) inter++;
+      return inter / (a.size + b.size - inter);
+    }
+
+    // Salience of a source sentence: summed weight×IDF "significance mass"
+    // (Luhn), plus the number/cue gate that decides whether it's worth
+    // showing at all. `keys` is its token set, used for de-duplication.
+    function salienceOf(sentence, srcIndex) {
+      const seen = new Set();
+      const content = [];
+      for (const t of tokenize(sentence)) {
+        if (seen.has(t.key)) continue;
+        seen.add(t.key);
+        content.push(t);
+      }
+      let score = 0;
+      let hasNumber = false;
+      for (const t of content) {
+        score += t.weight * idf(srcIndex, t.key);
+        if (t.isNumber) hasNumber = true;
+      }
+      const worth = content.length >= MIN_CONTENT_TOKENS && (hasNumber || hasCueWord(sentence));
+      return { worth, score, hasNumber, keys: seen };
+    }
+
+    // buildLeftouts(sources, reportText) → [{doc, items:[{sentence,context}]}]
+    // sources tagged {prior:true} (last week's report) are reference material,
+    // never checked for omission. Ranked by salience, de-duplicated across
+    // documents, capped per-doc and overall so the list stays short.
+    function buildLeftouts(sources, reportText) {
+      const active = (sources || []).filter((s) => !s.prior && s.text);
+      if (!active.length) return [];
+      const srcIndex = buildIndex(active);
+      const reportIndex = buildIndex([{ name: "__report__", text: reportText }]);
+
+      const candidates = [];
+      for (const src of active) {
+        const sentences = splitSentences(src.text);
+        for (let i = 0; i < sentences.length; i++) {
+          const sentence = sentences[i];
+          if (isBoilerplate(sentence)) continue;
+          const sal = salienceOf(sentence, srcIndex);
+          if (!sal.worth) continue;
+          const chk = checkSentence(sentence, reportIndex);
+          if (chk.verdict === "short") continue;
+          // Numbers are the paraphrase-resistant anchor. A sentence carrying a
+          // figure counts as covered when EITHER every figure is in the report,
+          // OR the sentence is otherwise well-covered (a present fact that only
+          // dropped a minor date shouldn't surface). Only a missing figure on a
+          // poorly-covered sentence is a real omission. Cue-only sentences (no
+          // number) fall back to plain token coverage.
+          if (sal.hasNumber) {
+            if (!chk.missingNumbers.length || chk.coverage >= FOUND_MIN) continue;
+          } else if (chk.coverage >= LEFTOUT_COVERAGE_MAX) {
+            continue;
+          }
+          const context = [sentences[i - 1], sentence, sentences[i + 1]].filter(Boolean).join(" ");
+          candidates.push({ doc: src.name, sentence, context, salience: sal.score, keys: sal.keys });
+        }
+      }
+      candidates.sort((a, b) => b.salience - a.salience);
+
+      // Greedy MMR: skip a candidate too similar to one already kept, so a
+      // fact repeated across the ~7 documents appears once.
+      const shown = [];
+      for (const c of candidates) {
+        if (shown.length >= LEFTOUT_MAX_TOTAL) break;
+        if (shown.some((s) => jaccard(s.keys, c.keys) >= LEFTOUT_SIM_MAX)) continue;
+        shown.push(c);
+      }
+
+      const byDoc = new Map();
+      for (const c of shown) {
+        let g = byDoc.get(c.doc);
+        if (!g) byDoc.set(c.doc, (g = []));
+        if (g.length < LEFTOUT_MAX_PER_DOC) g.push(c);
+      }
+      return Array.from(byDoc, ([doc, items]) => ({ doc, items }));
+    }
+
+    // ── best-of-N selection ───────────────────────────────────────────────
+    // The gateway is nondeterministic at temperature 0 (same inputs → visibly
+    // different reports). Rather than fight that, generate a few candidates
+    // and keep the best measured one, converting variance into a search space.
+    // scoreCandidate rates one summary's TEXT (no DOM needed) so it can run on
+    // raw candidates before any is rendered.
+    function scoreCandidate(summaryText, sources) {
+      const index = buildIndex(sources);
+      let ungrounded = 0;
+      for (const raw of String(summaryText).split(/\n+/)) {
+        const line = raw.trim();
+        if (!line) continue;
+        if (checkBlock(line, index).verdict === "none") ungrounded++;
+      }
+      const groups = buildLeftouts(sources, summaryText);
+      const omissions = groups.reduce((n, g) => n + g.items.length, 0);
+      return { ungrounded, omissions, length: String(summaryText).length };
+    }
+
+    // selectBest([summaryText…], sources) → {index, summary, score, all}
+    // Thresholded lexicographic ordering (the gate-then-rank rule): first
+    // prefer candidates with NO ungrounded lines (a hallucinated line is the
+    // worst failure); among those, fewest salient omissions; then the tighter
+    // one (concision discourages a padded/over-copied draft). Deterministic:
+    // the same candidate set always yields the same winner.
+    function selectBest(candidates, sources) {
+      const scored = candidates.map((summary, index) => ({
+        index, summary, ...scoreCandidate(summary, sources),
+      }));
+      const clean = scored.filter((c) => c.ungrounded === 0);
+      const pool = clean.length ? clean : scored;
+      pool.sort((a, b) =>
+        a.ungrounded - b.ungrounded || a.omissions - b.omissions || a.length - b.length);
+      const winner = pool[0];
+      return { index: winner.index, summary: winner.summary, score: winner, all: scored };
+    }
+
     // ══ decorator (browser only) ══════════════════════════════════════════
     // Display philosophy (user decision, 21 Jul 2026): NO scoreboard, no
     // green/amber/red grading on the report — a verified line looks like a
@@ -447,11 +623,91 @@
         return targets;
       }
 
+      // Report text for the reverse (coverage) direction: every leaf block
+      // (paragraph, list item, heading, table cell) on its own line, so words
+      // never glue across blocks ("toward 20" + "First-ever" must not fuse
+      // into one token) and sentence boundaries survive.
+      function reportText() {
+        const parts = [];
+        preview.querySelectorAll("p, li, h1, h2, h3, h4, th, td").forEach((n) => {
+          parts.push(n.textContent);
+        });
+        return parts.join("\n");
+      }
+
+      // The "may not be in the report" panel: grouped by document, collapsed
+      // by default, each item expandable to its surrounding source context.
+      function renderLeftoutPanel(groups) {
+        const total = groups.reduce((n, g) => n + g.items.length, 0);
+        const panel = el("section", "leftout-panel");
+        if (!total) {
+          panel.appendChild(
+            el("p", "leftout-clear", "Nothing important looks left out of the report.")
+          );
+          return panel;
+        }
+        const toggle = el("button", "leftout-toggle");
+        toggle.type = "button";
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.appendChild(
+          el("span", "leftout-toggle-text",
+            "A few things from your documents that may not be in the report")
+        );
+        toggle.appendChild(el("span", "leftout-count", String(total)));
+        const body = el("div", "leftout-body");
+        body.hidden = true;
+        toggle.addEventListener("click", () => {
+          const open = toggle.getAttribute("aria-expanded") === "true";
+          toggle.setAttribute("aria-expanded", String(!open));
+          body.hidden = open;
+        });
+        body.appendChild(
+          el("p", "leftout-intro",
+            "These didn't clearly match anything in the report. Some may be covered " +
+            "in different words — open one to check it against the original.")
+        );
+        for (const g of groups) {
+          const docWrap = el("div", "leftout-doc");
+          const head = el("button", "leftout-doc-head");
+          head.type = "button";
+          head.setAttribute("aria-expanded", "false");
+          head.appendChild(el("span", "leftout-doc-name", g.doc));
+          head.appendChild(el("span", "leftout-doc-count", String(g.items.length)));
+          const list = el("ul", "leftout-list");
+          list.hidden = true;
+          head.addEventListener("click", () => {
+            const open = head.getAttribute("aria-expanded") === "true";
+            head.setAttribute("aria-expanded", String(!open));
+            list.hidden = open;
+          });
+          for (const item of g.items) {
+            const li = el("li", "leftout-item");
+            const snip = el("button", "leftout-snippet", item.sentence);
+            snip.type = "button";
+            snip.title = "Show this in the document";
+            const ctx = el("p", "leftout-context");
+            ctx.hidden = true;
+            ctx.appendChild(passageNode(item.context, [item.sentence]));
+            snip.addEventListener("click", () => {
+              ctx.hidden = !ctx.hidden;
+            });
+            li.append(snip, ctx);
+            list.appendChild(li);
+          }
+          docWrap.append(head, list);
+          body.appendChild(docWrap);
+        }
+        panel.append(toggle, body);
+        return panel;
+      }
+
       function refresh() {
         if (!sources.length) return;
         closePanel();
         const oldStrip = container.querySelector(".src-strip");
         if (oldStrip) oldStrip.remove();
+        const oldLeft = container.querySelector(".leftout-panel");
+        if (oldLeft) oldLeft.remove();
         if (!index) index = buildIndex(sources);
 
         let flagged = 0;
@@ -501,11 +757,17 @@
         }
         strip.appendChild(el("span", "src-strip-hint", "Click any line to see where it came from."));
         container.insertBefore(strip, container.firstChild);
+
+        // Reverse direction: what's in the documents but not the report.
+        container.appendChild(renderLeftoutPanel(buildLeftouts(sources, reportText())));
       }
 
       return { refresh, closePanel };
     }
 
-    return { buildIndex, checkBlock, splitSentences, tokenize, attach };
+    return {
+      buildIndex, checkBlock, splitSentences, tokenize,
+      salienceOf, buildLeftouts, scoreCandidate, selectBest, attach,
+    };
   }
 );
