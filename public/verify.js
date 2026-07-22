@@ -194,8 +194,8 @@
       if (/(^|: )not stated in document\.?$/i.test(t)) {
         return "Placeholder — the documents really didn't state this. Nothing to check.";
       }
-      if (/^first report [—-] no prior week to compare\.?$/i.test(t)) {
-        return "Standard first-report note added by the rules — nothing to check.";
+      if (/^first report[.\s—-]+no prior week to compare\.?$/i.test(t)) {
+        return "Standard first-report note added by the rules. Nothing to check.";
       }
       if (/^notes for the week ending /i.test(t)) {
         return "The date on this line is filled in by the app — that's by design.";
