@@ -530,6 +530,60 @@ button:disabled { cursor: not-allowed; }
   font-weight: 650;
 }
 
+/* Line delete (linedelete.js): a quiet trash icon that only appears on
+   hover, sitting in the preview's own right padding so it never shifts or
+   wraps the line's text. Anchored on the line itself for p/li, and on the
+   row's last cell for tables (opposite side from verify.js's dot/flag, so
+   the two hover affordances never collide). */
+.summary-preview p,
+.summary-preview li,
+.summary-preview td:last-child {
+  position: relative;
+}
+.line-del {
+  position: absolute;
+  top: 50%;
+  right: -21px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--faint);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .1s ease, background .1s ease, color .1s ease;
+}
+.summary-preview p:hover .line-del,
+.summary-preview li:hover .line-del,
+.summary-preview tr:hover .line-del,
+.line-del:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.line-del:hover,
+.line-del:focus-visible {
+  background: var(--red-bg);
+  color: var(--red-text);
+  border-color: transparent;
+}
+
+/* Boilerplate flag (boilerplate.js): a quiet, always-visible red tint on
+   lines that are fixed wording from the report format itself — not a
+   verdict, just easy to notice before sending. Background-only (no border,
+   no padding change) so it never nudges the line-delete icon's position. */
+.summary-preview .is-boilerplate {
+  background: var(--red-bg);
+  border-radius: 4px;
+}
+
 /* Edit ⇄ Preview toggle: tinted while the raw-text editor is open. */
 .btn-secondary.is-active {
   background: var(--indigo-tint);

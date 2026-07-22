@@ -34,6 +34,7 @@
     "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z",
     "M12 9v4M12 17h.01",
   ];
+  const ICON_UNDO = ["M1 4v6h6", "M3.51 15a9 9 0 1 0 2.13-9.36L1 10"];
 
   function svgIcon(paths, size) {
     const svg = document.createElementNS(SVG_NS, "svg");
@@ -750,15 +751,21 @@
     const preview = document.createElement("div");
     preview.className = "summary-preview";
     preview.setAttribute("aria-label", "Formatted summary: " + label);
-    // Source check (verify.js): wired to the card's result-body further
-    // below, then refreshed after every preview render so manual edits are
-    // re-checked too. Preview-only — Copy and downloads read the textarea,
-    // so dots and panel never reach the email or the exported files.
+    // Source check (verify.js), line-delete (linedelete.js), and the fixed-
+    // wording flag (boilerplate.js) are all wired to the card's result-body
+    // further below, then re-run after every preview render so manual edits
+    // (and deletes) are always re-checked / re-hooked / re-flagged.
+    // Preview-only — Copy and downloads read the textarea, so dots, the
+    // source panel, trash icons, and the boilerplate tint never reach the
+    // email or the exported files.
     let verifyUI = null;
+    let editUI = null;
     function renderPreview() {
       preview.textContent = ""; // drop the old fragment
       preview.appendChild(window.MD.render(window.MD.parse(textarea.value)));
       if (verifyUI) verifyUI.refresh();
+      if (editUI) editUI.refresh();
+      if (window.Boilerplate) window.Boilerplate.flag(preview);
     }
     renderPreview();
     textarea.hidden = true; // preview first; Edit reveals the raw text
@@ -781,6 +788,20 @@
     editBtn.setAttribute("aria-pressed", "false");
     editBtn.setAttribute("aria-label", "Switch between formatted preview and editable text");
     actions.appendChild(editBtn);
+
+    // Undo (for the hover trash icon in the preview): hidden until a line
+    // has actually been deleted, then shows how many deletes are queued up.
+    // Lives in the toolbar rather than a banner in the preview — quiet when
+    // there's nothing to undo, same idea as the "double-check" flag.
+    const undoBtn = smallButton("", () => { if (editUI) editUI.undo(); }, "btn btn-secondary");
+    undoBtn.hidden = true;
+    undoBtn.setAttribute("aria-label", "Restore the last deleted line");
+    function setUndoCount(count) {
+      undoBtn.hidden = count === 0;
+      undoBtn.textContent = "";
+      undoBtn.append(svgIcon(ICON_UNDO, 13), document.createTextNode(count > 1 ? `Undo (${count})` : "Undo delete"));
+    }
+    actions.appendChild(undoBtn);
 
     // Copy lands rich (text/html — Outlook keeps headings/tables/bullets on
     // paste) AND plain (text/plain — the raw text) in one clipboard write.
@@ -853,6 +874,16 @@
     if (window.Verify && sources && sources.length) {
       verifyUI = window.Verify.attach({ preview, container: body, sources });
       verifyUI.refresh();
+    }
+    // Line delete doesn't need source documents — wire it up regardless.
+    if (window.LineDelete) {
+      editUI = window.LineDelete.attach({
+        preview,
+        textarea,
+        rerender: renderPreview,
+        onStackChange: setUndoCount,
+      });
+      editUI.refresh();
     }
     card.append(bar, body);
     const list = $("resultlist");

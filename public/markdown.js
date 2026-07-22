@@ -63,28 +63,44 @@
   }
 
   // Consecutive | lines -> one table. Header only when row 2 is |---|---|.
-  function makeTable(rowLines) {
+  // sourceLines mirrors rowLines 1:1 (the raw line each row came from) and is
+  // threaded through the same header/separator filtering so it stays aligned
+  // with the returned `rows` — the only way the preview can map a rendered
+  // <tr> back to a line in the textarea for line-delete.
+  function makeTable(rowLines, sourceLines) {
     const cellRows = rowLines.map(splitRow);
     let header = null;
     let body = cellRows;
+    let bodyLines = sourceLines;
     if (cellRows.length >= 2 && isSeparatorCells(cellRows[1])) {
       header = cellRows[0];
       body = cellRows.slice(2);
+      bodyLines = sourceLines.slice(2);
     }
     // Tolerate stray separator rows anywhere else (models repeat them).
-    body = body.filter((r) => !isSeparatorCells(r));
+    const rows = [];
+    const rowSourceLines = [];
+    body.forEach((r, idx) => {
+      if (isSeparatorCells(r)) return;
+      rows.push(r);
+      rowSourceLines.push(bodyLines[idx]);
+    });
     return {
       type: "table",
       header: header ? header.map(parseInlines) : null,
-      rows: body.map((r) => r.map(parseInlines)),
+      rows: rows.map((r) => r.map(parseInlines)),
+      rowLines: rowSourceLines,
     };
   }
 
   // ── block parsing ─────────────────────────────────────────────────────
   // parse(text) -> array of block nodes:
-  //   {type:"heading", level:1-4, inlines} | {type:"paragraph", inlines}
-  //   {type:"list", items:[inlines]}       | {type:"table", header, rows}
+  //   {type:"heading", level:1-4, inlines} | {type:"paragraph", inlines, line}
+  //   {type:"list", items:[inlines], itemLines} | {type:"table", header, rows, rowLines}
   //   {type:"hr"}                          | {type:"blank"}
+  // `line` / `itemLines` / `rowLines` are 0-based indexes into the input's
+  // split lines — the source-of-truth mapping the preview uses to delete a
+  // specific line from the raw textarea (see linedelete.js).
   function parse(text) {
     const blocks = [];
     const lines = String(text == null ? "" : text).replace(/\r\n?/g, "\n").split("\n");
@@ -120,29 +136,33 @@
       // Table: a run of lines that start with "|" (separator row optional).
       if (line.charAt(0) === "|") {
         const rows = [];
+        const rowLines = [];
         while (i < lines.length && lines[i].trim().charAt(0) === "|") {
           rows.push(lines[i].trim());
+          rowLines.push(i);
           i++;
         }
-        blocks.push(makeTable(rows));
+        blocks.push(makeTable(rows, rowLines));
         continue;
       }
 
       // Bullet list: consecutive "- item" / "* item" lines.
       if (/^[-*]\s+/.test(line)) {
         const items = [];
+        const itemLines = [];
         while (i < lines.length) {
           const bm = /^[-*]\s+(.*)$/.exec(lines[i].trim());
           if (!bm) break;
           items.push(parseInlines(bm[1]));
+          itemLines.push(i);
           i++;
         }
-        blocks.push({ type: "list", items });
+        blocks.push({ type: "list", items, itemLines });
         continue;
       }
 
       // Anything else: one paragraph per line (see file header for why).
-      blocks.push({ type: "paragraph", inlines: parseInlines(line) });
+      blocks.push({ type: "paragraph", inlines: parseInlines(line), line: i });
       i++;
     }
     return blocks;
@@ -171,15 +191,17 @@
       case "paragraph": {
         const p = document.createElement("p");
         appendInlines(p, block.inlines);
+        p.dataset.srcLine = String(block.line);
         return p;
       }
       case "list": {
         const ul = document.createElement("ul");
-        for (const item of block.items) {
+        block.items.forEach((item, idx) => {
           const li = document.createElement("li");
           appendInlines(li, item);
+          li.dataset.srcLine = String(block.itemLines[idx]);
           ul.appendChild(li);
-        }
+        });
         return ul;
       }
       case "table": {
@@ -196,15 +218,16 @@
           table.appendChild(thead);
         }
         const tbody = document.createElement("tbody");
-        for (const row of block.rows) {
+        block.rows.forEach((row, idx) => {
           const tr = document.createElement("tr");
+          tr.dataset.srcLine = String(block.rowLines[idx]);
           for (const cell of row) {
             const td = document.createElement("td");
             appendInlines(td, cell);
             tr.appendChild(td);
           }
           tbody.appendChild(tr);
-        }
+        });
         table.appendChild(tbody);
         return table;
       }

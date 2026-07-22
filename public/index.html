@@ -226,10 +226,18 @@
     <script src="pdfgen.js"></script>
     <!-- markdown.js must load before app.js: it defines window.MD, which
          app.js uses for the formatted previews and rich clipboard copy.
-         verify.js (window.Verify, the per-line source check) must load
-         before app.js too — result cards wire it up at creation time. -->
+         verify.js (window.Verify, the per-line source check), linedelete.js
+         (window.LineDelete, the hover-to-delete-a-line control), and
+         boilerplate.js (window.Boilerplate, the fixed-wording flag) must
+         load before app.js too — result cards wire them all up at creation
+         time. preview-lines.js (window.PreviewLines) is the shared "what
+         counts as one line" walk linedelete.js and boilerplate.js both use,
+         so it loads before either. -->
     <script src="markdown.js"></script>
     <script src="verify.js"></script>
+    <script src="preview-lines.js"></script>
+    <script src="linedelete.js"></script>
+    <script src="boilerplate.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
