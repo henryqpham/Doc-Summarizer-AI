@@ -717,6 +717,39 @@
   // so manual edits are always included. Cards are built once and never
   // re-rendered, so edits survive later runs; "Clear all" removes the nodes
   // (and their listeners).
+  // ── result tabs ──────────────────────────────────────────────────────
+  // Each summary lives in its own browser-style tab instead of stacking
+  // down the page. Switching tabs only flips each card's hidden flag —
+  // cards are never re-rendered, so textarea edits, source-check panels,
+  // and undo stacks all survive switching. Closing a tab removes that one
+  // card for good ("Clear all" for a single summary).
+  let tabSeq = 0;
+  function activateResultTab(id) {
+    for (const t of $("resulttabs").children) {
+      const on = t.dataset.tid === id;
+      t.classList.toggle("is-active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    }
+    for (const c of $("resultlist").children) c.hidden = c.dataset.tid !== id;
+  }
+  function closeResultTab(id) {
+    const tabs = $("resulttabs");
+    const find = (parent) =>
+      Array.prototype.find.call(parent.children, (el) => el.dataset.tid === id);
+    const tab = find(tabs);
+    const card = find($("resultlist"));
+    const wasActive = tab && tab.classList.contains("is-active");
+    const neighbor = tab && (tab.nextElementSibling || tab.previousElementSibling);
+    if (tab) tab.remove();
+    if (card) card.remove();
+    if (!tabs.children.length) {
+      $("results").hidden = true;
+      $("emptystate").hidden = false;
+    } else if (wasActive && neighbor) {
+      activateResultTab(neighbor.dataset.tid);
+    }
+  }
+
   function addResultCard(label, downloadBase, summaryText, beforeNode, isCombined, sources) {
     const card = document.createElement("article");
     card.className = "result-card";
@@ -891,6 +924,37 @@
     // to appending rather than throwing.
     const anchor = beforeNode && beforeNode.parentNode === list ? beforeNode : null;
     list.insertBefore(card, anchor);
+
+    // Build this card's tab at the mirrored position, then bring it to front.
+    const tid = String(++tabSeq);
+    card.dataset.tid = tid;
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = "result-tab";
+    tab.dataset.tid = tid;
+    tab.setAttribute("role", "tab");
+    tab.appendChild(svgIcon(isCombined ? ICON_COMBINED : ICON_DOC, 13));
+    const tlabel = document.createElement("span");
+    tlabel.className = "result-tab-label";
+    tlabel.textContent = label;
+    tlabel.title = label;
+    tab.appendChild(tlabel);
+    const tclose = document.createElement("span");
+    tclose.className = "result-tab-close";
+    tclose.textContent = "×";
+    tclose.setAttribute("role", "button");
+    tclose.setAttribute("aria-label", "Close this summary");
+    tclose.title = "Close this summary";
+    tclose.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeResultTab(tid);
+    });
+    tab.appendChild(tclose);
+    tab.addEventListener("click", () => activateResultTab(tid));
+    const tabs = $("resulttabs");
+    tabs.insertBefore(tab, tabs.children[Array.prototype.indexOf.call(list.children, card)] || null);
+    activateResultTab(tid);
+
     $("results").hidden = false;
     $("emptystate").hidden = true; // onboarding yields to the first real result
   }
@@ -965,13 +1029,31 @@
       r.addEventListener("change", updateSummarizeButton)
     );
 
-    // Clear all empties the results view.
+    // Clear all empties the results view (cards AND their tabs).
     $("clear").addEventListener("click", () => {
       $("resultlist").textContent = ""; // drops every card and its listeners
+      $("resulttabs").textContent = "";
       $("results").hidden = true;
       $("emptystate").hidden = false; // back to the onboarding guide
       setStatus("");
     });
+
+    // Documents-panel collapse: tuck the left pane away so summaries get
+    // the full window; a slim rail brings it back. Only this boolean ever
+    // touches localStorage — never file names or content.
+    const workspace = document.querySelector(".workspace");
+    function setLeftCollapsed(on) {
+      workspace.classList.toggle("left-collapsed", on);
+      $("pane-expand").hidden = !on;
+      try {
+        localStorage.setItem("docsum.leftCollapsed", on ? "1" : "0");
+      } catch {}
+    }
+    $("pane-toggle").addEventListener("click", () => setLeftCollapsed(true));
+    $("pane-expand").addEventListener("click", () => setLeftCollapsed(false));
+    try {
+      if (localStorage.getItem("docsum.leftCollapsed") === "1") setLeftCollapsed(true);
+    } catch {}
 
     // Limits dialog: native <dialog> gives Esc + focus handling for free;
     // clicking the backdrop (the dialog element itself) also closes it.

@@ -84,6 +84,11 @@
     <main class="workspace">
       <!-- ------ Left pane: intake ------ -->
       <section class="pane-left" aria-label="Add documents">
+        <button id="pane-toggle" class="pane-toggle" type="button" title="Hide this panel" aria-label="Hide the documents panel">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
         <div class="pane-left-scroll">
           <!-- Step 1: last week's report — reference for trends/"key changes".
                State (empty / extracting / ready / error) rendered by app.js. -->
@@ -157,6 +162,14 @@
         </div>
       </section>
 
+      <!-- Slim rail shown while the documents panel is hidden; clicking it
+           brings the panel back. Toggled by app.js, remembered per browser. -->
+      <button id="pane-expand" class="pane-expand" type="button" hidden title="Show the documents panel" aria-label="Show the documents panel">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </button>
+
       <!-- ------ Right pane: output ------ -->
       <section class="pane-right" aria-label="Summaries">
         <div class="pane-right-inner">
@@ -179,6 +192,9 @@
           <!-- Result cards, newest run on top. Cards are built by app.js; every
                filename/summary reaches the DOM via textContent only. -->
           <div id="results" hidden>
+            <!-- Browser-style tabs: one per generated summary. Built by
+                 app.js; switching tabs only flips each card's hidden flag. -->
+            <div id="resulttabs" class="result-tabs" role="tablist" aria-label="Generated summaries"></div>
             <div id="resultlist" class="resultlist"></div>
           </div>
 

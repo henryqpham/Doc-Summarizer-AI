@@ -33,7 +33,12 @@ running: start it again, then reload the page.
    paper) — the app will say so rather than guess.
 4. Choose **one combined summary** of everything, or **each file
    separately** — then click **Summarize**.
-5. The summary appears on the right. **You can edit it right there.**
+5. The summary appears on the right, in its own **tab** (like browser
+   tabs). Each new summary opens a new tab — click a tab to switch
+   between summaries, or click its **×** to close one. **You can edit
+   the summary right there.** Need more room? The small **‹** button at
+   the top of the left panel tucks it away; the thin strip that remains
+   brings it back.
 6. **Copy** it into your email, or download it as a Word file, PDF, or
    plain text. Downloads are named with the day you saved them, like
    `report_7_21_2026.pdf` — keep them; next week starts by adding
