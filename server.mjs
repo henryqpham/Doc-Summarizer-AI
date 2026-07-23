@@ -28,7 +28,7 @@ try {
 
 // Dynamic import: asksage.mjs reads process.env at module scope, so it must load
 // AFTER loadEnv() above. A static import would hoist and read empty values.
-const { config, assertConfig, extractText, summarizeDocuments, summarizeFile, listModels } =
+const { config, assertConfig, extractText, summarizeDocuments, analyzeChanges, summarizeFile, listModels } =
   await import("./lib/asksage.mjs");
 
 try {
@@ -169,47 +169,71 @@ async function handleExtract(req, res) {
   }
 }
 
+/** Read and JSON-parse a request body under the JSON size cap. */
+async function readJsonBody(req) {
+  const body = await readBody(req, MAX_JSON_BYTES);
+  try {
+    return JSON.parse(body.toString("utf8"));
+  } catch {
+    throw new Error("The request body must be JSON.");
+  }
+}
+
+/**
+ * Validate the shared { documents, previous? } payload used by both the
+ * summarize and the change-review endpoints. Validated here, defensively, so a
+ * malformed caller gets a precise complaint instead of a confusing failure
+ * deeper in the pipeline. `previous` (last week's report) is optional.
+ */
+function parseDocumentsPayload(parsed) {
+  const docs = parsed?.documents;
+  if (!Array.isArray(docs) || docs.length === 0) {
+    throw new Error('"documents" must be a non-empty array of { filename, text }.');
+  }
+  const documents = docs.map((doc, i) => {
+    if (typeof doc?.text !== "string" || !doc.text.trim()) {
+      throw new Error(`documents[${i}] needs a non-empty string "text".`);
+    }
+    const filename =
+      typeof doc.filename === "string" && doc.filename.trim() ? doc.filename.trim() : "document";
+    return { filename, text: doc.text };
+  });
+
+  let previous = null;
+  if (parsed?.previous != null) {
+    if (typeof parsed.previous !== "object" || typeof parsed.previous.text !== "string" || !parsed.previous.text.trim()) {
+      throw new Error('"previous" (last week\'s report) needs a non-empty string "text".');
+    }
+    const pname =
+      typeof parsed.previous.filename === "string" && parsed.previous.filename.trim()
+        ? parsed.previous.filename.trim()
+        : "previous report";
+    previous = { filename: pname, text: parsed.previous.text };
+  }
+  return { documents, previous };
+}
+
 /** POST /api/summarize-text — already-extracted text in, ONE combined summary out. */
 async function handleSummarizeText(req, res) {
   try {
-    const body = await readBody(req, MAX_JSON_BYTES);
-    let parsed;
-    try {
-      parsed = JSON.parse(body.toString("utf8"));
-    } catch {
-      throw new Error("The request body must be JSON.");
-    }
-    // Validate the shape here, defensively, so a malformed caller gets a
-    // precise complaint instead of a confusing failure deeper in the pipeline.
-    const docs = parsed?.documents;
-    if (!Array.isArray(docs) || docs.length === 0) {
-      throw new Error('"documents" must be a non-empty array of { filename, text }.');
-    }
-    const documents = docs.map((doc, i) => {
-      if (typeof doc?.text !== "string" || !doc.text.trim()) {
-        throw new Error(`documents[${i}] needs a non-empty string "text".`);
-      }
-      const filename =
-        typeof doc.filename === "string" && doc.filename.trim() ? doc.filename.trim() : "document";
-      return { filename, text: doc.text };
-    });
-
-    // Optional: last week's report rides along as reference context so
-    // trend/status/"key changes" judgments come from real prior-week evidence.
-    let previous = null;
-    if (parsed?.previous != null) {
-      if (typeof parsed.previous !== "object" || typeof parsed.previous.text !== "string" || !parsed.previous.text.trim()) {
-        throw new Error('"previous" (last week\'s report) needs a non-empty string "text".');
-      }
-      const pname =
-        typeof parsed.previous.filename === "string" && parsed.previous.filename.trim()
-          ? parsed.previous.filename.trim()
-          : "previous report";
-      previous = { filename: pname, text: parsed.previous.text };
-    }
-
+    const { documents, previous } = parseDocumentsPayload(await readJsonBody(req));
     const { summary, chars } = await summarizeDocuments(documents, previous);
     sendJson(res, 200, { summary, chars });
+  } catch (err) {
+    sendJson(res, 400, { error: err.message });
+  }
+}
+
+/**
+ * POST /api/suggest-changes — this week's extracted text + last week's report in,
+ * a short "suggested changes" block out (no summary; the browser shows this
+ * week's document verbatim alongside this block).
+ */
+async function handleSuggestChanges(req, res) {
+  try {
+    const { documents, previous } = parseDocumentsPayload(await readJsonBody(req));
+    const { changes, chars } = await analyzeChanges(documents, previous);
+    sendJson(res, 200, { changes, chars });
   } catch (err) {
     sendJson(res, 400, { error: err.message });
   }
@@ -236,6 +260,7 @@ const server = createServer((req, res) => {
   const path = req.url.split("?")[0];
   if (req.method === "POST" && path === "/api/extract") return handleExtract(req, res);
   if (req.method === "POST" && path === "/api/summarize-text") return handleSummarizeText(req, res);
+  if (req.method === "POST" && path === "/api/suggest-changes") return handleSuggestChanges(req, res);
   if (req.method === "POST" && path === "/api/summarize") return handleSummarize(req, res);
   if (req.method === "GET" && path === "/api/health") return handleHealth(req, res);
   if (req.method === "GET") return serveStatic(req, res);

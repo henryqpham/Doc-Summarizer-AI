@@ -315,6 +315,17 @@
     return b;
   }
 
+  // A small muted caption shown above an editable field in edit mode, so the
+  // two textareas (suggested changes / this week's document) are never
+  // ambiguous. Text always lands via textContent.
+  function editFieldLabel(text) {
+    const el = document.createElement("div");
+    el.className = "field-label";
+    el.textContent = text;
+    el.hidden = true;
+    return el;
+  }
+
   // A tinted status pill for a file row. `withSpinner`/`withCheck` prepend the
   // matching glyph; text always lands via createTextNode.
   function statusPill(kind, text, { withSpinner = false, withCheck = false } = {}) {
@@ -406,14 +417,14 @@
     btn.disabled = summarizing || pending || ready === 0 || !gate;
     // Only the label span — writing btn.textContent would wipe the sparkle icon.
     $("summarize-label").textContent = summarizing
-      ? "Summarizing…"
+      ? "Checking…"
       : pending
         ? "Extracting…"
         : ready > 1
           ? currentMode() === "separate"
-            ? `Summarize ${ready} documents separately`
-            : `Summarize ${ready} documents together`
-          : "Summarize";
+            ? `Check ${ready} documents separately`
+            : `Check ${ready} documents together`
+          : "Check for changes";
     // Explain the only non-obvious blocker: files are ready but step 1 isn't.
     $("gate-hint").hidden = !(ready > 0 && !pending && !summarizing && !gate);
   }
@@ -532,6 +543,33 @@
     return data;
   }
 
+  // Change-review request: this week's extracted text (+ last week's report when
+  // loaded) -> { changes } — a short suggested-changes block. The verbatim body
+  // is assembled in the browser from these same docs and never sent back, so a
+  // failure here still leaves this week's document to render. Single pass: the
+  // block is small, so best-of-N (a summary-quality device) does not apply.
+  async function requestChanges(docs) {
+    const body = {
+      documents: docs.map((f) => ({ filename: f.name, text: f.text })),
+    };
+    if (prevWell.status === "ready") {
+      body.previous = { filename: prevWell.filename, text: prevWell.text };
+    }
+    const res = await fetchWithTimeout(
+      "/api/suggest-changes",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      LONG_TIMEOUT_MS,
+      TIMEOUT_MESSAGE
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    return data;
+  }
+
   // Best-of-N: the gateway is nondeterministic, so the same inputs yield
   // different reports run-to-run. Rather than ship whichever run happened,
   // generate a few candidates and keep the best MEASURED one — most grounded,
@@ -594,67 +632,81 @@
     }
   }
 
-  // All ready documents -> ONE combined summary -> one card. Runs best-of-N
-  // (requestBestSummary): the multi-pass work is framed as verification, not
-  // as "drafts", and the step counter keeps a multi-minute wait from looking
-  // frozen. The reviewer never sees "version N" language.
+  // All ready documents -> ONE card: this week's text reproduced VERBATIM as the
+  // body, with a red "suggested changes" block on top from the change-review
+  // call. The body is assembled here in the browser (never sent to the model),
+  // so it is guaranteed this-week-only, unedited, and always renders — even when
+  // the change check itself fails.
   async function summarizeCombined(ready) {
     const only = ready.length === 1;
+    const bodyText = ready.map((f) => f.text).join("\n\n");
+    const label = only ? ready[0].name : `This week — ${ready.length} documents`;
+    const base = "report_" + reportDate();
+    const before = $("resultlist").firstChild;
+    setStatus(
+      only
+        ? `Checking "${ready[0].name}" against last week… this can take a moment.`
+        : `Checking ${ready.length} documents against last week… this can take a moment.`,
+      "busy"
+    );
+    let changes;
     try {
-      const data = await requestBestSummary(ready, (i, n) => {
-        setStatus(
-          n > 1
-            ? `Preparing your report and checking it against your documents… this can take a few minutes. (step ${i + 1} of ${n})`
-            : only
-              ? `Summarizing "${ready[0].name}"… this can take a moment.`
-              : `Summarizing ${ready.length} documents into one combined summary… this can take a moment.`,
-          "busy"
-        );
-      });
-      const label =
-        ready.length === 1 ? ready[0].name : `Combined summary — ${ready.length} documents`;
-      const base = "report_" + reportDate();
-      addResultCard(label, base, data.summary, $("resultlist").firstChild, ready.length > 1, cardSources(ready));
-      setStatus(
-        `Done${prevWell.status === "ready" ? " — compared against last week's report" : ""} — review, then copy or download. (${data.chars.toLocaleString()} characters read across ` +
-          `${ready.length} document${ready.length === 1 ? "" : "s"})`,
-        "ok"
-      );
+      changes = (await requestChanges(ready)).changes;
     } catch (err) {
-      setStatus(err.message || String(err), "error");
+      // The change check failed; still show this week's document unchanged.
+      changes =
+        "**Suggested changes**\n\n- Could not compare against last week (" +
+        (err.message || String(err)) +
+        "). This week's document is shown below unchanged.";
+      addResultCard(label, base, { changes, body: bodyText }, before, ready.length > 1);
+      setStatus(
+        "Showing this week's document. The change check didn't run: " + (err.message || String(err)),
+        "error"
+      );
+      return;
     }
+    addResultCard(label, base, { changes, body: bodyText }, before, ready.length > 1);
+    setStatus(
+      "Done — suggested changes are at the top in red; this week's document is below. Review, then copy or download.",
+      "ok"
+    );
   }
 
-  // Each ready document -> its own summary -> its own card. Strictly one
-  // /api/summarize-text call in flight at a time; a failure on one file
-  // does not stop the rest.
+  // Each ready document -> its own card (its verbatim body + its own change
+  // block vs last week). Strictly one /api/suggest-changes call at a time; a
+  // failure on one file still shows that file's document with a note.
   async function summarizeSeparately(ready) {
     // This run's cards go above older ones but keep their own top-down order.
     const before = $("resultlist").firstChild;
     const failures = [];
     for (let i = 0; i < ready.length; i++) {
       const item = ready[i];
-      setStatus(`Summarizing ${i + 1} of ${ready.length}: ${item.name}…`, "busy");
+      const base = (sanitizeFilename(item.name) || "document") + "_report_" + reportDate();
+      setStatus(`Checking ${i + 1} of ${ready.length}: ${item.name}…`, "busy");
+      let changes;
       try {
-        const data = await requestSummary([item]);
-        const base = (sanitizeFilename(item.name) || "document") + "_report_" + reportDate();
-        addResultCard(item.name, base, data.summary, before, false, cardSources([item]));
+        changes = (await requestChanges([item])).changes;
       } catch (err) {
+        changes =
+          "**Suggested changes**\n\n- Could not compare against last week (" +
+          (err.message || String(err)) +
+          ").";
         failures.push(`${item.name} — ${err.message || err}`);
       }
+      addResultCard(item.name, base, { changes, body: item.text }, before, false);
     }
     if (!failures.length) {
       setStatus(
-        `Done — ${ready.length} ${ready.length === 1 ? "summary" : "summaries"} ready. ` +
+        `Done — ${ready.length} ${ready.length === 1 ? "document" : "documents"} ready with suggested changes. ` +
           "Review, then copy or download.",
         "ok"
       );
     } else if (failures.length === ready.length) {
-      setStatus(`Couldn't summarize: ${failures.join("; ")}`, "error");
+      setStatus(`Showed your document${ready.length === 1 ? "" : "s"}, but the change check didn't run: ${failures.join("; ")}`, "error");
     } else {
       setStatus(
         `Done with ${ready.length - failures.length} of ${ready.length}. ` +
-          `Failed: ${failures.join("; ")}`,
+          `Change check didn't run for: ${failures.join("; ")}`,
         "error"
       );
     }
@@ -684,45 +736,65 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  // Word opens HTML saved as .doc. The body is rebuilt from the parsed
-  // Markdown through MD.toHtml, which escapes every text node — raw model
-  // text never reaches the markup. MD.toHtml's static inline styles
-  // (Calibri, real pt heading sizes, 1pt-bordered tables with a shaded
-  // bold header row, bullet lists, ruled <hr> separators) survive Word's
-  // HTML import, so the file opens as a formatted report matching the
-  // weekly template. The mso conditional block asks Word for Print Layout
-  // instead of Web Layout.
-  function wordDocBlob(text) {
-    const body = window.MD.toHtml(window.MD.parse(text));
+  // ── two-part export: red "Suggested changes" on top + verbatim body below ─
+  // Both halves are rebuilt from parsed Markdown through MD.toHtml, which
+  // escapes every text node — raw model/document text never reaches the markup
+  // as a string. MD's static inline EXPORT_STYLES (Calibri, pt heading sizes,
+  // bordered tables with a shaded header row, bullets, ruled <hr>) survive
+  // Word/Outlook import. The RED is an inline `color` on a wrapper div: Word
+  // and Outlook ignore <style> blocks but honor inline color, and EXPORT_STYLES
+  // set no color of their own, so #C00000 cascades into every heading/bullet/
+  // bold in the changes half; the body half is pinned near-black so it can
+  // never inherit the red.
+  function composeExportHtml(changesText, bodyText) {
+    const changes = String(changesText || "").trim();
+    const bodyHtml = window.MD.toHtml(window.MD.parse(String(bodyText || "")));
+    const parts = ['<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#111111;">'];
+    if (changes) {
+      parts.push('<div style="color:#C00000;">' + window.MD.toHtml(window.MD.parse(changes)) + "</div>");
+      parts.push('<hr style="border:none;border-top:1.5pt solid #7f7f7f;margin:12pt 0;">');
+    }
+    parts.push('<div style="color:#111111;">' + bodyHtml + "</div>");
+    parts.push("</div>");
+    return parts.join("");
+  }
+
+  // Plain-text twin of composeExportHtml (clipboard text/plain, .txt, PDF).
+  function composeExportText(changesText, bodyText) {
+    const changes = String(changesText || "").trim();
+    return (changes ? changes + "\n\n----------\n\n" : "") + String(bodyText || "");
+  }
+
+  // Word opens HTML saved as .doc. The two-part body comes from
+  // composeExportHtml (escaped throughout); the mso conditional asks Word for
+  // Print Layout, and the leading U+FEFF (BOM) makes Word detect UTF-8.
+  function wordDocBlob(changesText, bodyText) {
     const html =
       '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
       'xmlns:w="urn:schemas-microsoft-com:office:word">' +
-      '<head><meta charset="utf-8"><title>Summary</title>' +
+      '<head><meta charset="utf-8"><title>This week’s document</title>' +
       "<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View>" +
       "<w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->" +
-      "</head>" +
-      '<body style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#111111;">' +
-      body +
+      "</head><body>" +
+      composeExportHtml(changesText, bodyText) +
       "</body></html>";
-    // Leading U+FEFF (BOM) so Word detects the file as UTF-8.
     return new Blob([String.fromCharCode(0xfeff), html], { type: "application/msword" });
   }
 
   // ── result cards ──────────────────────────────────────────────────────
-  // One card per summary: label, formatted preview ⇄ editable textarea
-  // (Edit/Preview toggle), Copy / .txt / .doc / PDF. The summary arrives as
-  // Markdown; the preview renders it through window.MD (createElement/
-  // textContent only — it is untrusted model output). The textarea stays the
-  // single source of truth: Copy and every download read it AT CLICK TIME,
-  // so manual edits are always included. Cards are built once and never
-  // re-rendered, so edits survive later runs; "Clear all" removes the nodes
-  // (and their listeners).
+  // One card per run: a red "suggested changes" block on top and this week's
+  // document reproduced VERBATIM below, each with a formatted preview ⇄ editable
+  // textarea (Edit/Preview toggle) and Copy / .txt / .doc / PDF. Both halves
+  // render through window.MD (createElement/textContent only — untrusted model
+  // and document text). The two textareas are the single source of truth: Copy
+  // and every download read them AT CLICK TIME, so manual edits are always
+  // included. Cards are built once and never re-rendered, so edits survive later
+  // runs; "Clear all" removes the nodes (and their listeners).
   // ── result tabs ──────────────────────────────────────────────────────
-  // Each summary lives in its own browser-style tab instead of stacking
-  // down the page. Switching tabs only flips each card's hidden flag —
-  // cards are never re-rendered, so textarea edits, source-check panels,
-  // and undo stacks all survive switching. Closing a tab removes that one
-  // card for good ("Clear all" for a single summary).
+  // Each result lives in its own browser-style tab instead of stacking down the
+  // page. Switching tabs only flips each card's hidden flag — cards are never
+  // re-rendered, so textarea edits survive switching. Closing a tab removes that
+  // one card for good ("Clear all" for a single result).
   let tabSeq = 0;
   function activateResultTab(id) {
     for (const t of $("resulttabs").children) {
@@ -750,10 +822,19 @@
     }
   }
 
-  function addResultCard(label, downloadBase, summaryText, beforeNode, isCombined, sources) {
+  // One card = this week's document reproduced VERBATIM (bodyBox), with a red
+  // "suggested changes" block on top (changesBox). Each textarea is the source
+  // of truth for its half and is read AT CLICK TIME by Copy and every download,
+  // so manual edits to either half are always included. No source-check /
+  // line-delete / boilerplate decorators here: the body is verbatim (nothing to
+  // ground or flag) and the changes block is advisory.
+  function addResultCard(label, downloadBase, content, beforeNode, isCombined) {
+    const changesText = (content && content.changes) || "";
+    const bodyText = (content && content.body) || "";
+
     const card = document.createElement("article");
     card.className = "result-card";
-    card.setAttribute("aria-label", "Summary: " + label);
+    card.setAttribute("aria-label", "This week's document: " + label);
 
     const bar = document.createElement("div");
     bar.className = "result-card-header";
@@ -768,84 +849,78 @@
     const actions = document.createElement("div");
     actions.className = "result-actions";
 
-    const textarea = document.createElement("textarea");
-    textarea.className = "summary-box";
-    textarea.rows = 12;
-    textarea.spellcheck = false;
-    // autocomplete="off" prevents the browser's session-restore from
-    // persisting this field's contents to disk.
-    textarea.setAttribute("autocomplete", "off");
-    textarea.setAttribute("aria-label", "Editable summary: " + label);
-    textarea.value = summaryText;
+    // Source-of-truth textareas (hidden until Edit): the red suggested-changes
+    // block and the verbatim this-week body.
+    const changesBox = document.createElement("textarea");
+    changesBox.className = "summary-box changes-box";
+    changesBox.rows = 5;
+    changesBox.spellcheck = false;
+    changesBox.setAttribute("autocomplete", "off"); // keep out of session-restore
+    changesBox.setAttribute("aria-label", "Editable suggested changes: " + label);
+    changesBox.value = changesText;
+    changesBox.hidden = true;
 
-    // Formatted preview (the default view): headings, bold labels, bullets,
-    // and real tables, echoing the Word template. Rebuilt from the CURRENT
-    // textarea value each time edit mode is left.
-    const preview = document.createElement("div");
-    preview.className = "summary-preview";
-    preview.setAttribute("aria-label", "Formatted summary: " + label);
-    // Source check (verify.js), line-delete (linedelete.js), and the fixed-
-    // wording flag (boilerplate.js) are all wired to the card's result-body
-    // further below, then re-run after every preview render so manual edits
-    // (and deletes) are always re-checked / re-hooked / re-flagged.
-    // Preview-only — Copy and downloads read the textarea, so dots, the
-    // source panel, trash icons, and the boilerplate tint never reach the
-    // email or the exported files.
-    let verifyUI = null;
-    let editUI = null;
+    const bodyBox = document.createElement("textarea");
+    bodyBox.className = "summary-box body-box";
+    bodyBox.rows = 16;
+    bodyBox.spellcheck = false;
+    bodyBox.setAttribute("autocomplete", "off");
+    bodyBox.setAttribute("aria-label", "Editable document text: " + label);
+    bodyBox.value = bodyText;
+    bodyBox.hidden = true;
+
+    // Formatted previews (default view): the changes block is red
+    // (.suggested-changes); the body echoes the Word template (.summary-preview).
+    // Both rebuilt from the CURRENT textarea values whenever edit mode is left.
+    const changesPreview = document.createElement("div");
+    changesPreview.className = "suggested-changes";
+    changesPreview.setAttribute("aria-label", "Suggested changes: " + label);
+
+    const bodyPreview = document.createElement("div");
+    bodyPreview.className = "summary-preview";
+    bodyPreview.setAttribute("aria-label", "This week's document: " + label);
+
+    // Captions shown only in edit mode so the two editable fields are clear.
+    const changesEditLabel = editFieldLabel("Suggested changes (review, then delete before sending)");
+    const bodyEditLabel = editFieldLabel("This week's document");
+
     function renderPreview() {
-      preview.textContent = ""; // drop the old fragment
-      preview.appendChild(window.MD.render(window.MD.parse(textarea.value)));
-      if (verifyUI) verifyUI.refresh();
-      if (editUI) editUI.refresh();
-      if (window.Boilerplate) window.Boilerplate.flag(preview);
+      changesPreview.textContent = "";
+      changesPreview.appendChild(window.MD.render(window.MD.parse(changesBox.value)));
+      bodyPreview.textContent = "";
+      bodyPreview.appendChild(window.MD.render(window.MD.parse(bodyBox.value)));
     }
     renderPreview();
-    textarea.hidden = true; // preview first; Edit reveals the raw text
 
-    // Edit ⇄ Preview toggle: one small secondary button swaps the two views.
+    // Edit ⇄ Preview toggle: swaps both previews for both textareas at once.
     let editing = false;
     function setEditing(on) {
       editing = on;
-      if (on && verifyUI) verifyUI.closePanel();
       if (!on) renderPreview(); // returning to preview picks up manual edits
-      if (preview.parentNode) preview.parentNode.classList.toggle("is-editing", on);
-      preview.hidden = on;
-      textarea.hidden = !on;
+      if (bodyPreview.parentNode) bodyPreview.parentNode.classList.toggle("is-editing", on);
+      changesPreview.hidden = on;
+      bodyPreview.hidden = on;
+      changesEditLabel.hidden = !on;
+      bodyEditLabel.hidden = !on;
+      changesBox.hidden = !on;
+      bodyBox.hidden = !on;
       editBtn.textContent = on ? "Preview" : "Edit";
       editBtn.setAttribute("aria-pressed", String(on));
       editBtn.classList.toggle("is-active", on);
-      if (on) textarea.focus();
+      if (on) changesBox.focus();
     }
     const editBtn = smallButton("Edit", () => setEditing(!editing), "btn btn-secondary");
     editBtn.setAttribute("aria-pressed", "false");
     editBtn.setAttribute("aria-label", "Switch between formatted preview and editable text");
     actions.appendChild(editBtn);
 
-    // Undo (for the hover trash icon in the preview): hidden until a line
-    // has actually been deleted, then shows how many deletes are queued up.
-    // Lives in the toolbar rather than a banner in the preview — quiet when
-    // there's nothing to undo, same idea as the "double-check" flag.
-    const undoBtn = smallButton("", () => { if (editUI) editUI.undo(); }, "btn btn-secondary");
-    undoBtn.hidden = true;
-    undoBtn.setAttribute("aria-label", "Restore the last deleted line");
-    function setUndoCount(count) {
-      undoBtn.hidden = count === 0;
-      undoBtn.textContent = "";
-      undoBtn.append(svgIcon(ICON_UNDO, 13), document.createTextNode(count > 1 ? `Undo (${count})` : "Undo delete"));
-    }
-    actions.appendChild(undoBtn);
-
-    // Copy lands rich (text/html — Outlook keeps headings/tables/bullets on
-    // paste) AND plain (text/plain — the raw text) in one clipboard write.
-    // Fallbacks: plain writeText, then select-for-Ctrl+C in edit mode.
+    // Copy lands rich (text/html — Word/Outlook keep the red block + formatting
+    // on paste) AND plain (text/plain) in one clipboard write. Fallbacks: plain
+    // writeText, then select-for-Ctrl+C in edit mode.
     const copyBtn = smallButton("Copy", async () => {
-      const text = textarea.value;
+      const html = composeExportHtml(changesBox.value, bodyBox.value);
+      const text = composeExportText(changesBox.value, bodyBox.value);
       if (!text) return;
-      const html =
-        '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#111111;">' +
-        window.MD.toHtml(window.MD.parse(text)) +
-        "</div>";
       try {
         if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem === "function") {
           await navigator.clipboard.write([
@@ -865,8 +940,8 @@
           await navigator.clipboard.writeText(text);
           setStatus("Copied — paste into your email.", "ok");
         } catch {
-          setEditing(true); // the textarea must be visible to select it
-          textarea.select();
+          setEditing(true); // a textarea must be visible to select it
+          bodyBox.select();
           setStatus("Press Ctrl+C to copy the selected text.", "busy");
         }
       }
@@ -876,24 +951,26 @@
     actions.appendChild(copyBtn);
 
     const txtBtn = smallButton(".txt", () => {
-      if (!textarea.value) return;
-      downloadBlob(new Blob([textarea.value], { type: "text/plain" }), downloadBase + ".txt");
+      const text = composeExportText(changesBox.value, bodyBox.value);
+      if (!text) return;
+      downloadBlob(new Blob([text], { type: "text/plain" }), downloadBase + ".txt");
       setStatus(".txt downloaded.", "ok");
     }, "btn btn-secondary");
     txtBtn.setAttribute("aria-label", "Download as .txt");
     actions.appendChild(txtBtn);
 
     const docBtn = smallButton(".doc", () => {
-      if (!textarea.value) return;
-      downloadBlob(wordDocBlob(textarea.value), downloadBase + ".doc");
+      if (!bodyBox.value && !changesBox.value) return;
+      downloadBlob(wordDocBlob(changesBox.value, bodyBox.value), downloadBase + ".doc");
       setStatus(".doc downloaded.", "ok");
     }, "btn btn-secondary");
     docBtn.setAttribute("aria-label", "Download as Word .doc");
     actions.appendChild(docBtn);
 
     const pdfBtn = smallButton("PDF", () => {
-      if (!textarea.value) return;
-      const bytes = window.PDFGen.textToPdf(textarea.value);
+      const text = composeExportText(changesBox.value, bodyBox.value);
+      if (!text) return;
+      const bytes = window.PDFGen.textToPdf(text);
       downloadBlob(new Blob([bytes], { type: "application/pdf" }), downloadBase + ".pdf");
       setStatus("PDF downloaded.", "ok");
     }, "btn btn-secondary");
@@ -903,21 +980,10 @@
     bar.append(titleWrap, actions);
     const body = document.createElement("div");
     body.className = "result-body";
-    body.append(preview, textarea); // exactly one visible at a time
-    if (window.Verify && sources && sources.length) {
-      verifyUI = window.Verify.attach({ preview, container: body, sources });
-      verifyUI.refresh();
-    }
-    // Line delete doesn't need source documents — wire it up regardless.
-    if (window.LineDelete) {
-      editUI = window.LineDelete.attach({
-        preview,
-        textarea,
-        rerender: renderPreview,
-        onStackChange: setUndoCount,
-      });
-      editUI.refresh();
-    }
+    // Order: changes (caption + preview + box) then body (caption + preview +
+    // box). Preview mode shows the two previews; edit mode shows the captions +
+    // textareas. hidden flags (set above / in setEditing) pick which.
+    body.append(changesEditLabel, changesPreview, changesBox, bodyEditLabel, bodyPreview, bodyBox);
     card.append(bar, body);
     const list = $("resultlist");
     // The anchor may have been detached by "Clear all" mid-run — fall back

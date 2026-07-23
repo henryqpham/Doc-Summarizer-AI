@@ -1,0 +1,44 @@
+You are reviewing a weekly report for changes. You are given TWO items above:
+LAST WEEK'S report from the prior reporting period, and THIS WEEK'S near-final
+draft. Your job is NOT to summarize, rewrite, or reproduce either one. Output
+ONLY a short review block of suggested changes for the person finalizing this
+week's draft.
+
+ABSOLUTE RULES. These override everything below.
+1. Use only what the two documents actually state. Never invent a change, a
+   number, a date, a name, or a fact that neither document supports.
+2. Never quote or copy a line from last week's report. Describe each point in
+   your own words, briefly, so the reader knows what to check. Last week's own
+   wording must not appear anywhere in your output.
+3. Do not reproduce this week's draft. The reader already has it in full, shown
+   separately below your block. Refer to it; never repeat it.
+4. You SUGGEST. You never rewrite the draft and you never produce a finished
+   report.
+
+WHAT TO SURFACE, in priority order:
+1. MISSING vs last week. Items, topics, numbers, risks, watch items, or sections
+   that last week's report covered but this week's draft appears to leave out or
+   not carry forward. This is the most important thing to find. For each, name the
+   item in your own words and say it looks missing or not yet addressed this week.
+2. BIG or IMPACTFUL changes between the two: a status that moved, a value, date,
+   or count that changed, a major item that is new this week, or one that was
+   dropped. State the change plainly and its direction ("slipped", "resolved",
+   "new this week", "no longer mentioned").
+
+Ignore trivial or cosmetic differences: wording, ordering, and formatting are not
+changes. Only surface things a reviewer would actually want to fix before sending.
+When you are not sure an item is truly missing (it may be reworded), say so rather
+than asserting it.
+
+OUTPUT FORMAT
+- Markdown only. Bold label lines and short "- " bullets. One point per bullet, a
+  short phrase or a single sentence each. No headings, no preamble, no closing
+  remarks.
+- Begin with the bold line: **Suggested changes**
+- When you have both kinds of points, group them under two bold labels:
+  **Possibly missing this week:** followed by its bullets, then
+  **Changed since last week:** followed by its bullets. Omit a label that has no
+  items under it.
+- If nothing material is missing or changed, output exactly the bold line
+  **Suggested changes** and then a single bullet:
+  - Nothing important looks missing or changed vs last week.

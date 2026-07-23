@@ -139,10 +139,10 @@
 
         <div class="pane-left-footer">
           <fieldset class="segmented">
-            <legend class="sr-only">Summary mode</legend>
+            <legend class="sr-only">Comparison mode</legend>
             <label class="seg-option">
               <input type="radio" name="mode" value="combined" checked />
-              <span>One combined summary</span>
+              <span>All together</span>
             </label>
             <label class="seg-option">
               <input type="radio" name="mode" value="separate" />
@@ -155,7 +155,7 @@
               <path d="M19 15.5l1 2.7 2.7 1-2.7 1-1 2.7-1-2.7-2.7-1 2.7-1z" opacity=".75"/>
             </svg>
             <!-- Label text set by app.js (updateSummarizeButton). -->
-            <span id="summarize-label">Summarize</span>
+            <span id="summarize-label">Check for changes</span>
           </button>
           <!-- Shown by app.js only when files are ready but step 1 isn't done. -->
           <p id="gate-hint" class="gate-hint" hidden>Add last week's report above, or tick "First report".</p>
@@ -174,7 +174,7 @@
       <section class="pane-right" aria-label="Summaries">
         <div class="pane-right-inner">
           <div class="results-header">
-            <h2>Summaries</h2>
+            <h2>This week's document</h2>
             <button id="clear" class="btn btn-secondary" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/>
@@ -209,8 +209,8 @@
               <path d="M97 54v14M90 61h14" stroke="var(--indigo)" stroke-width="3" stroke-linecap="round"/>
               <path d="M22 58v8M18 62h8" stroke="var(--dashed)" stroke-width="2.5" stroke-linecap="round"/>
             </svg>
-            <h2>Summaries appear here</h2>
-            <p>Drop a document on the left to get started. Your email-ready summary will show up in this panel.</p>
+            <h2>Your document appears here</h2>
+            <p>Drop this week's document on the left to get started. It shows up here in full, with suggested changes versus last week flagged in red on top.</p>
             <div class="howit">
               <h3>How it works</h3>
               <ol>
@@ -224,7 +224,7 @@
                 </li>
                 <li>
                   <span class="step-num" aria-hidden="true">3</span>
-                  <span class="step-text"><strong>Summarize</strong> — trends and changes are judged against last week.</span>
+                  <span class="step-text"><strong>Check for changes</strong> — this week's document is shown in full, with suggested changes versus last week flagged on top.</span>
                 </li>
                 <li>
                   <span class="step-num" aria-hidden="true">4</span>
