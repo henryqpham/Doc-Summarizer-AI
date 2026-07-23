@@ -73,13 +73,22 @@ running: start it again, then reload the page.
 You don't need this to use the tool, but it's here if anyone ever asks how
 the report is put together:
 
-- For a combined report, the tool writes it a few times over (giving the
-  documents in a different order each time) and automatically keeps the
-  version that is **best supported by your documents and covers the most of
-  them** — checked line by line against the sources, not by the tool judging
-  its own confidence. That's why a combined report takes a few minutes.
-- The version you see is always at least as good as a single pass would
-  have produced; the check can only improve the result, never worsen it.
+- For a combined report, the tool first builds a **checklist of the facts in
+  your documents** — every number, date, dollar amount, and named risk or
+  decision. After writing the report it checks that list against the text,
+  and any fact that didn't make it in is added back in the right section,
+  word for word from your documents. That's why a combined report takes a
+  few minutes.
+- The check can only add missing facts — it never rewrites or removes
+  anything the report already says. Anything it still couldn't place is
+  reported rather than silently dropped.
+- When you load last week's report, the tool never shows it to the AI as a
+  report. It turns it into a plain list of last week's facts, works out
+  what changed (dates that moved, numbers that went up or down), and hands
+  the AI that change list. After writing, it double-checks that no
+  last-week number snuck in as if it were current — and anything from last
+  week that fell out of the report shows up in its own list under the
+  report, so you can confirm it was dropped on purpose.
 - It still can't guarantee every sentence is correct — that's why you read
   it and check the "double-check" notes before sending. The tool finds and
   grounds; you decide.

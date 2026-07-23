@@ -91,9 +91,13 @@
   ]);
 
   // ── request timeouts ──────────────────────────────────────────────────
-  const LONG_TIMEOUT_MS = 6 * 60 * 1000; // extract & summarize
+  // 10 minutes: a full 7-document combined run measured 4m09s on fake data
+  // (23 Jul 2026) and real weeks run larger. The server heartbeats during
+  // the wait (see server.mjs), so a long run holds the connection alive and
+  // this deadline is purely the client-side safety net.
+  const LONG_TIMEOUT_MS = 10 * 60 * 1000; // extract & summarize
   const HEALTH_TIMEOUT_MS = 5 * 1000;
-  const TIMEOUT_MESSAGE = "Timed out after 6 minutes — try a smaller document or try again.";
+  const TIMEOUT_MESSAGE = "Timed out after 10 minutes — try again with fewer or smaller documents.";
 
   // fetch() with an AbortController deadline. On timeout the caller gets a
   // friendly Error instead of a raw AbortError.
@@ -517,32 +521,46 @@
     if (prevWell.status === "ready") {
       body.previous = { filename: prevWell.filename, text: prevWell.text };
     }
-    const res = await fetchWithTimeout(
-      "/api/summarize-text",
-      {
+    // The server streams heartbeat spaces while the model works (see
+    // server.mjs handleSummarizeText), so response HEADERS arrive at once
+    // and the real multi-minute wait is the BODY. fetchWithTimeout only
+    // guards until headers, so this call runs its own deadline spanning the
+    // whole exchange — aborting the controller also aborts the body read.
+    // Long-path errors arrive as 200 + { error } (headers were already
+    // sent), so the body is checked as well as the status.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), LONG_TIMEOUT_MS);
+    try {
+      const res = await fetch("/api/summarize-text", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-      },
-      LONG_TIMEOUT_MS,
-      TIMEOUT_MESSAGE
-    );
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-    return data;
+        signal: controller.signal,
+      });
+      const data = await res.json(); // leading heartbeat whitespace is valid JSON
+      if (!res.ok || data.error) throw new Error(data.error || `Request failed (${res.status})`);
+      return data;
+    } catch (err) {
+      if (controller.signal.aborted) throw new Error(TIMEOUT_MESSAGE);
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
-  // Best-of-N: the gateway is nondeterministic, so the same inputs yield
-  // different reports run-to-run. Rather than ship whichever run happened,
-  // generate a few candidates and keep the best MEASURED one — most grounded,
-  // then most complete, then tightest (verify.js selectBest). Diversity comes
-  // from DOCUMENT ORDER only (candidate 1 = canonical order, others rotated):
-  // temperature stays 0.0, so the calibrated template is never perturbed and
-  // no server/template change is needed. Candidate 1 is the canonical floor,
-  // so the result can never be worse than a single-shot run. Sequential
-  // (matches the app's one-at-a-time design); a failed candidate just shrinks
-  // the pool. Invisible to the reviewer by design — see USER-GUIDE.
-  const BEST_OF = 3;
+  // Best-of-N is RETIRED to 1 (23 Jul 2026), for three measured reasons:
+  // 1. Diversity came from document-order rotation, but the server now
+  //    re-sorts documents by density (template.mjs orderDocumentsDense),
+  //    so all candidates sent an IDENTICAL prompt — 3x cost, no diversity.
+  // 2. Completeness is now enforced by the fact-ledger pass on the server
+  //    (lib/ledger.mjs): facts are checked in code and missing ones are
+  //    patched in, which supersedes pick-the-most-complete-candidate.
+  // 3. Each candidate held a silent multi-minute connection open, and
+  //    stacking three tripled exposure to the connection resets that
+  //    surfaced as "Failed to fetch" after 3-6 minutes of spinning.
+  // The selection machinery below is kept intact: raising this number
+  // restores the old behavior if diversity is ever reintroduced.
+  const BEST_OF = 1;
   function rotate(arr, n) {
     const k = arr.length ? n % arr.length : 0;
     return k ? arr.slice(k).concat(arr.slice(0, k)) : arr.slice();
@@ -551,6 +569,7 @@
     // Reordering only diversifies with 2+ documents; below that, one pass.
     const n = docs.length >= 2 ? BEST_OF : 1;
     const summaries = [];
+    const checks = []; // per-candidate server fact-check stats (may be null)
     let chars = 0;
     let lastErr = null;
     for (let i = 0; i < n; i++) {
@@ -558,6 +577,7 @@
       try {
         const data = await requestSummary(rotate(docs, i));
         summaries.push(data.summary);
+        checks.push(data.completeness || null);
         if (!chars) chars = data.chars;
       } catch (err) {
         lastErr = err; // accumulate successes; a failed candidate shrinks the pool
@@ -565,7 +585,7 @@
     }
     if (!summaries.length) throw lastErr || new Error("Couldn't build the report — please try again.");
     // Without the scorer we can't rank — ship the canonical (first) candidate.
-    if (summaries.length === 1 || !window.Verify) return { summary: summaries[0], chars };
+    if (summaries.length === 1 || !window.Verify) return { summary: summaries[0], chars, completeness: checks[0] };
     const pick = window.Verify.selectBest(summaries, cardSources(docs));
     // Quiet audit trail (dev console): which candidate won and why. Keeps the
     // deterministic gate-then-rank decision inspectable without touching the UI.
@@ -575,7 +595,7 @@
         pick.all.map((c) => ({ unverified: c.ungrounded, possiblyMissing: c.omissions, length: c.length }))
       );
     } catch (_) {}
-    return { summary: pick.summary, chars };
+    return { summary: pick.summary, chars, completeness: checks[pick.index] || checks[0] };
   }
 
   async function summarize() {
@@ -615,11 +635,47 @@
         ready.length === 1 ? ready[0].name : `Combined summary — ${ready.length} documents`;
       const base = "report_" + reportDate();
       addResultCard(label, base, data.summary, $("resultlist").firstChild, ready.length > 1, cardSources(ready));
-      setStatus(
-        `Done${prevWell.status === "ready" ? " — compared against last week's report" : ""} — review, then copy or download. (${data.chars.toLocaleString()} characters read across ` +
-          `${ready.length} document${ready.length === 1 ? "" : "s"})`,
-        "ok"
-      );
+      // The server's fact check (lib/ledger.mjs) rides along in the response.
+      // Its outcome must be VISIBLE: a silently-failed check once made three
+      // "inconsistent" runs indistinguishable from working ones (23 Jul).
+      const fc = data.completeness;
+      if (fc && fc.error) {
+        setStatus(
+          `Your report is ready, but the automatic fact check could not run. ` +
+            `This report was NOT checked against the fact list — please review ` +
+            `the "things that may not be in the report" panel extra carefully before sending.`,
+          "error"
+        );
+      } else {
+        let factNote = "";
+        if (fc && fc.ledger) {
+          factNote = ` Fact check: ${fc.ledger} facts verified`;
+          if (fc.inserted) factNote += `, ${fc.inserted} added back in`;
+          if (fc.residual && fc.residual.length)
+            factNote += `, ${fc.residual.length} couldn't be placed — see the panel below the report`;
+          factNote += ".";
+        }
+        // The week-over-week staleness check (lib/reconcile.mjs) — only runs
+        // when last week's report was attached. Same visibility rule as the
+        // fact check: its outcome is never silent.
+        const rc = fc && fc.reconcile;
+        if (rc && rc.error) {
+          factNote +=
+            " The last-week leftover check could not run — double-check week-over-week numbers yourself.";
+        } else if (rc && rc.staleLeaks) {
+          factNote += ` Last-week check: ${rc.staleFixed} leftover last-week value${rc.staleFixed === 1 ? "" : "s"} cleaned up`;
+          if (rc.staleResidual && rc.staleResidual.length)
+            factNote += `, ${rc.staleResidual.length} still need${rc.staleResidual.length === 1 ? "s" : ""} your review`;
+          factNote += ".";
+        } else if (rc && rc.priorFacts) {
+          factNote += " Last-week check: no leftover last-week values found.";
+        }
+        setStatus(
+          `Done${prevWell.status === "ready" ? " — compared against last week's report" : ""} — review, then copy or download. (${data.chars.toLocaleString()} characters read across ` +
+            `${ready.length} document${ready.length === 1 ? "" : "s"})${factNote}`,
+          "ok"
+        );
+      }
     } catch (err) {
       setStatus(err.message || String(err), "error");
     }

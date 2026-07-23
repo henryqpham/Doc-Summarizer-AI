@@ -356,11 +356,14 @@
     }
 
     // buildLeftouts(sources, reportText) → [{doc, items:[{sentence,context}]}]
-    // sources tagged {prior:true} (last week's report) are reference material,
-    // never checked for omission. Ranked by salience, de-duplicated across
-    // documents, capped per-doc and overall so the list stays short.
-    function buildLeftouts(sources, reportText) {
-      const active = (sources || []).filter((s) => !s.prior && s.text);
+    // Default direction: sources tagged {prior:true} (last week's report) are
+    // reference material, never checked for omission. With fromPrior=true the
+    // SAME machinery runs against ONLY the prior report — "what did last week
+    // say that this report doesn't" — so dropping stale content stays a
+    // deliberate, visible act (reconcile policy, 23 Jul 2026). Ranked by
+    // salience, de-duplicated, capped so the list stays short.
+    function buildLeftouts(sources, reportText, fromPrior) {
+      const active = (sources || []).filter((s) => (fromPrior ? s.prior : !s.prior) && s.text);
       if (!active.length) return [];
       const srcIndex = buildIndex(active);
       const reportIndex = buildIndex([{ name: "__report__", text: reportText }]);
@@ -637,7 +640,8 @@
 
       // The "may not be in the report" panel: grouped by document, collapsed
       // by default, each item expandable to its surrounding source context.
-      function renderLeftoutPanel(groups) {
+      // `labels` overrides the copy for the week-over-week variant.
+      function renderLeftoutPanel(groups, labels) {
         const total = groups.reduce((n, g) => n + g.items.length, 0);
         const panel = el("section", "leftout-panel");
         if (!total) {
@@ -651,6 +655,7 @@
         toggle.setAttribute("aria-expanded", "false");
         toggle.appendChild(
           el("span", "leftout-toggle-text",
+            (labels && labels.toggle) ||
             "A few things from your documents that may not be in the report")
         );
         toggle.appendChild(el("span", "leftout-count", String(total)));
@@ -663,6 +668,7 @@
         });
         body.appendChild(
           el("p", "leftout-intro",
+            (labels && labels.intro) ||
             "These didn't clearly match anything in the report. Some may be covered " +
             "in different words — open one to check it against the original.")
         );
@@ -760,6 +766,23 @@
 
         // Reverse direction: what's in the documents but not the report.
         container.appendChild(renderLeftoutPanel(buildLeftouts(sources, reportText())));
+
+        // Week-over-week direction: what last week's report said that this
+        // one doesn't. The reconcile policy (23 Jul 2026) is that the report
+        // carries only this week's documents — this list is where a human
+        // confirms each drop was intentional. Only rendered when a prior
+        // report is attached and something actually fell away.
+        const priorGroups = buildLeftouts(sources, reportText(), true);
+        if (priorGroups.length) {
+          container.appendChild(renderLeftoutPanel(priorGroups, {
+            toggle: "In last week's report, not in this one",
+            intro:
+              "These lines were in last week's report but don't clearly appear in " +
+              "this one. If they were dropped on purpose, nothing to do. To keep " +
+              "one, take it from this week's documents rather than copying last " +
+              "week's version.",
+          }));
+        }
       }
 
       return { refresh, closePanel };

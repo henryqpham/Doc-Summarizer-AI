@@ -171,6 +171,10 @@ async function handleExtract(req, res) {
 
 /** POST /api/summarize-text — already-extracted text in, ONE combined summary out. */
 async function handleSummarizeText(req, res) {
+  // Set once the long model work starts. From that point the 200 header is
+  // already on the wire, so errors must travel in the body as { error } —
+  // the browser checks the body, not just the status (public/app.js).
+  let heartbeat = null;
   try {
     const body = await readBody(req, MAX_JSON_BYTES);
     let parsed;
@@ -208,10 +212,29 @@ async function handleSummarizeText(req, res) {
       previous = { filename: pname, text: parsed.previous.text };
     }
 
-    const { summary, chars } = await summarizeDocuments(documents, previous);
-    sendJson(res, 200, { summary, chars });
+    // The summarize call below holds this connection open for minutes with
+    // no bytes flowing (a 7-document run measured 4m09s), and a silent
+    // connection gets reset by security software well before the client's
+    // own deadline — observed as a browser "Failed to fetch" after 3-6
+    // minutes of spinning (23 Jul 2026). Send the headers now and drip one
+    // space every 10 seconds so the connection is never idle. Leading
+    // whitespace is valid JSON, so the browser's res.json() still parses
+    // the body that follows the heartbeats.
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    heartbeat = setInterval(() => {
+      if (!res.writableEnded) res.write(" ");
+    }, 10_000);
+    res.on("close", () => clearInterval(heartbeat));
+
+    const { summary, chars, completeness } = await summarizeDocuments(documents, previous);
+    res.end(JSON.stringify({ summary, chars, completeness }));
   } catch (err) {
-    sendJson(res, 400, { error: err.message });
+    // Before the heartbeat starts (validation failures) the status can still
+    // say 400; after it, the 200 is committed and the error rides the body.
+    if (heartbeat === null) return sendJson(res, 400, { error: err.message });
+    res.end(JSON.stringify({ error: err.message }));
+  } finally {
+    if (heartbeat !== null) clearInterval(heartbeat);
   }
 }
 
